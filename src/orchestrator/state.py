@@ -1,6 +1,6 @@
 """Typed state shared by every node in the orchestrator graph."""
 
-from typing import Any, TypedDict
+from typing import Any, Protocol, TypedDict
 
 
 class GraphState(TypedDict):
@@ -22,3 +22,9 @@ class StateUpdate(TypedDict, total=False):
 
     agent: str | None
     result: dict[str, Any] | None
+
+
+class Node(Protocol):
+    """A graph node: reads the full state, returns a partial update."""
+
+    def __call__(self, state: GraphState) -> StateUpdate: ...

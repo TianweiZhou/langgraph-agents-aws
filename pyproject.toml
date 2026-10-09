@@ -30,9 +30,12 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 include = ["src", "tests"]
-extraPaths = ["src"]
+extraPaths = ["src", "tests"]
 venvPath = "."
 venv = ".venv"
+# LangGraph ships no stubs and has a few untyped internals; these only flag third-party gaps.
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

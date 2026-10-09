@@ -1,13 +1,10 @@
 """Contract every agent must follow to be plugged into the orchestrator."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from orchestrator.state import GraphState, StateUpdate
-
-AgentNode = Callable[[GraphState], StateUpdate]
+from orchestrator.state import Node
 
 
 @dataclass(frozen=True)
@@ -22,7 +19,7 @@ class Agent:
     description: str  # short text the router can use to pick this agent
     input_model: type[BaseModel]
     output_model: type[BaseModel]
-    node: AgentNode
+    node: Node
 
     def __post_init__(self) -> None:
         if not self.name.strip():
