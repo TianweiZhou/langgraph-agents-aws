@@ -1,0 +1,9 @@
+{
+  "app": "uv run --group infra python -m infra.app",
+  "watch": {
+    "include": ["src/**", "infra/**"]
+  },
+  "context": {
+    "env": "dev"
+  }
+}
