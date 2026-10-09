@@ -8,9 +8,12 @@ from langgraph.graph.state import CompiledStateGraph
 from agents.base import Agent
 from agents.registry import ALL_AGENTS, DEFAULT_AGENT
 from orchestrator.router import Router, RuleRouter, make_router_node
-from orchestrator.state import GraphState
+from orchestrator.state import GraphState, Node, StateUpdate
+from shared.logging import get_logger, log_context
 
 ROUTER_NODE = "router"
+
+logger = get_logger(__name__)
 
 Graph = CompiledStateGraph[GraphState, None, GraphState, GraphState]
 
@@ -20,6 +23,19 @@ def _selected_agent(state: GraphState) -> str:
     if agent is None:
         raise RuntimeError("Router did not choose an agent")
     return agent
+
+
+def _with_agent_logging(agent: Agent) -> Node:
+    """Run the agent's node with `agent` attached to every log line it writes."""
+
+    def node(state: GraphState) -> StateUpdate:
+        with log_context(agent=agent.name):
+            logger.info("Agent started")
+            update = agent.node(state)
+            logger.info("Agent finished")
+            return update
+
+    return node
 
 
 def build_graph(agents: Sequence[Agent], router: Router) -> Graph:
@@ -32,7 +48,7 @@ def build_graph(agents: Sequence[Agent], router: Router) -> Graph:
     builder = StateGraph(GraphState)
     builder.add_node(ROUTER_NODE, make_router_node(router))
     for agent in agents:
-        builder.add_node(agent.name, agent.node)
+        builder.add_node(agent.name, _with_agent_logging(agent))
         builder.add_edge(agent.name, END)
 
     builder.add_edge(START, ROUTER_NODE)
