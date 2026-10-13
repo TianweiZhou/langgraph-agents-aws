@@ -4,6 +4,7 @@
     "include": ["src/**", "infra/**"]
   },
   "context": {
-    "env": "dev"
+    "env": "dev",
+    "bedrockModelId": "us.amazon.nova-2-lite-v1:0"
   }
 }

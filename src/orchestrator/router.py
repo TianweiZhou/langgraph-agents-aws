@@ -4,7 +4,7 @@ The graph only depends on the `Router` protocol, so the simple rule-based
 router below can later be swapped for an LLM-driven supervisor.
 """
 
-from collections.abc import Iterable
+from collections.abc import Sequence
 from typing import Protocol
 
 from agents.base import Agent
@@ -22,9 +22,11 @@ class Router(Protocol):
 
 
 class RuleRouter:
-    """Uses the agent the caller asked for, otherwise falls back to a default."""
+    """Picks, in order: the agent the caller asked for, the first agent whose
+    intent check matches, then the default agent."""
 
-    def __init__(self, agents: Iterable[Agent], default: str) -> None:
+    def __init__(self, agents: Sequence[Agent], default: str) -> None:
+        self._agents = tuple(agents)
         self._names = frozenset(a.name for a in agents)
         if default not in self._names:
             raise UnknownAgentError(f"Default agent '{default}' is not registered")
@@ -32,11 +34,14 @@ class RuleRouter:
 
     def choose(self, state: GraphState) -> str:
         requested = state["agent"]
-        if requested is None:
-            return self._default
-        if requested not in self._names:
-            raise UnknownAgentError(f"Unknown agent '{requested}'")
-        return requested
+        if requested is not None:
+            if requested not in self._names:
+                raise UnknownAgentError(f"Unknown agent '{requested}'")
+            return requested
+        for agent in self._agents:
+            if agent.matches is not None and agent.matches(state):
+                return agent.name
+        return self._default
 
 
 def make_router_node(router: Router) -> Node:

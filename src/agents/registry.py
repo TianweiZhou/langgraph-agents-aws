@@ -2,6 +2,8 @@
 
 from agents.base import Agent
 from agents.hello.agent import agent as hello
+from agents.tone.agent import agent as tone
 
-ALL_AGENTS: tuple[Agent, ...] = (hello,)
+# Order matters: the router checks intent in this order before using the default.
+ALL_AGENTS: tuple[Agent, ...] = (tone, hello)
 DEFAULT_AGENT = hello.name

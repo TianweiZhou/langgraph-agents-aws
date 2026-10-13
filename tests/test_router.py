@@ -48,3 +48,29 @@ def test_rejects_unknown_default() -> None:
 def test_router_node_writes_choice_to_state() -> None:
     node = make_router_node(RuleRouter(AGENTS, default="hello"))
     assert node(make_state()) == {"agent": "hello"}
+
+
+def _matching(name: str, hit: bool) -> Agent:
+    return Agent(
+        name=name,
+        description=f"{name} agent",
+        input_model=_Model,
+        output_model=_Model,
+        node=_noop,
+        matches=lambda state: hit,
+    )
+
+
+def test_intent_match_beats_default() -> None:
+    agents = (_matching("tone", True), _agent("hello"))
+    assert RuleRouter(agents, default="hello").choose(make_state()) == "tone"
+
+
+def test_no_intent_match_uses_default() -> None:
+    agents = (_matching("tone", False), _agent("hello"))
+    assert RuleRouter(agents, default="hello").choose(make_state()) == "hello"
+
+
+def test_explicit_agent_beats_intent() -> None:
+    agents = (_matching("tone", True), _agent("hello"))
+    assert RuleRouter(agents, default="hello").choose(make_state(agent="hello")) == "hello"

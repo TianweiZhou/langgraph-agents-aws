@@ -26,3 +26,30 @@ uv run pytest
 - `src/shared/` - config, logging, prompt loading, model factory
 - `infra/` - CDK app
 - `tests/` - unit tests (Bedrock is mocked)
+
+## Agents
+
+| Agent | Picked when | Inputs |
+| --- | --- | --- |
+| `tone` | `agent: "tone"`, or `inputs.tone` is set, or the request says rewrite/rephrase/reword/tone | `request` = text, `inputs.tone`, optional `inputs.audience` |
+| `hello` | fallback | `request` |
+
+Example request body:
+
+```json
+{"user_id": "u1", "request": "hey send me the report", "inputs": {"tone": "formal", "audience": "my manager"}}
+```
+
+## Model
+
+The Bedrock model is set in `cdk.json` (`bedrockModelId`) and reaches the Lambda as `BEDROCK_MODEL_ID`.
+To switch, edit `cdk.json` or override one deploy: `cdk deploy -c bedrockModelId=<id> --profile dev`.
+IAM permissions follow the configured id automatically.
+
+## Evals
+
+```bash
+AWS_PROFILE=dev BEDROCK_MODEL_ID=us.amazon.nova-2-lite-v1:0 PYTHONPATH=src uv run python -m evals.tone.run
+```
+
+Runs `evals/tone/cases.jsonl` against the real model and exits non-zero below an 80% pass rate.

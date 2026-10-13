@@ -1,7 +1,8 @@
 import pytest
 from pydantic import BaseModel
 
-from agents.base import Agent
+from agents.base import Agent, InvalidAgentInput, parse_input
+from helpers import make_state
 from orchestrator.state import GraphState, StateUpdate
 
 
@@ -29,17 +30,25 @@ def test_agent_holds_contract_fields() -> None:
 
 
 def test_agent_node_returns_partial_update() -> None:
-    state: GraphState = {
-        "user_id": "u1",
-        "thread_id": "t1",
-        "request": "hi",
-        "agent": "echo",
-        "result": None,
-    }
-    assert _make().node(state) == {"result": {"text": "hi"}}
+    assert _make().node(make_state(request="hi")) == {"result": {"text": "hi"}}
 
 
 @pytest.mark.parametrize(("name", "description"), [("", "desc"), ("echo", "  ")])
 def test_agent_rejects_blank_name_or_description(name: str, description: str) -> None:
     with pytest.raises(ValueError):
         _make(name, description)
+
+
+class _Needs(BaseModel):
+    text: str
+    tone: str
+
+
+def test_parse_input_merges_request_and_inputs() -> None:
+    parsed = parse_input(_Needs, make_state(request="hey", inputs={"tone": "formal"}))
+    assert (parsed.text, parsed.tone) == ("hey", "formal")
+
+
+def test_parse_input_names_missing_fields() -> None:
+    with pytest.raises(InvalidAgentInput, match="tone"):
+        parse_input(_Needs, make_state(request="hey"))

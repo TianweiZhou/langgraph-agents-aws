@@ -13,6 +13,7 @@ class GraphState(TypedDict):
     user_id: str
     thread_id: str
     request: str
+    inputs: dict[str, Any] | None  # agent-specific fields, checked by each agent
     agent: str | None  # chosen by the router
     result: dict[str, Any] | None  # agent output
 

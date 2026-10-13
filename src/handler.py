@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+from agents.base import InvalidAgentInput
 from orchestrator.graph import Graph, build_default_graph
 from orchestrator.router import UnknownAgentError
 from orchestrator.state import GraphState
@@ -23,6 +24,7 @@ class InvokeRequest(BaseModel):
     thread_id: str = Field(default_factory=lambda: str(uuid.uuid4()), min_length=1)
     request: str = Field(min_length=1)
     agent: str | None = None  # optional: ask for a specific agent
+    inputs: dict[str, Any] | None = None  # agent-specific fields, e.g. {"tone": "formal"}
 
 
 class InvokeResponse(BaseModel):
@@ -57,6 +59,7 @@ def _run(req: InvokeRequest) -> InvokeResponse:
         "user_id": req.user_id,
         "thread_id": req.thread_id,
         "request": req.request,
+        "inputs": req.inputs,
         "agent": req.agent,
         "result": None,
     }
@@ -75,8 +78,8 @@ def lambda_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
         logger.info("Request received", extra={"user_id": req.user_id})
         try:
             resp = _run(req)
-        except UnknownAgentError as exc:
-            logger.warning("Unknown agent", extra={"error": str(exc)})
+        except (UnknownAgentError, InvalidAgentInput) as exc:
+            logger.warning("Rejected request", extra={"error": str(exc)})
             return _response(400, {"error": str(exc)})
         except Exception:
             logger.exception("Request failed")

@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / "src"
 BUILD_DIR = ROOT / "build" / "lambda"
-LAMBDA_PLATFORM = "aarch64-manylinux2014"  # matches the arm64 Lambda architecture
+LAMBDA_PLATFORM = "aarch64-manylinux_2_28"  # arm64; Lambda python3.12 runs AL2023 (glibc 2.34)
 PYTHON_VERSION = "3.12"
 
 

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Multi-agent system on AWS: LangGraph on Lambda with Amazon Bedrock."
 requires-python = ">=3.12"
 dependencies = [
+    "langchain-aws>=1.8.2",
     "langgraph>=1.2.14",
     "pydantic>=2.14.0",
 ]
@@ -25,7 +26,7 @@ package = false
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests", "infra"]
+src = ["src", "tests", "infra", "evals"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
@@ -33,7 +34,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
-include = ["src", "tests", "infra"]
+include = ["src", "tests", "infra", "evals"]
 extraPaths = ["src", "tests"]
 venvPath = "."
 venv = ".venv"
@@ -42,5 +43,5 @@ reportMissingTypeStubs = false
 reportUnknownMemberType = false
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]

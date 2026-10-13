@@ -15,6 +15,8 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
 
+from infra.bedrock_access import bedrock_resource_arns
+
 
 class ApiStack(Stack):
     def __init__(
@@ -24,6 +26,7 @@ class ApiStack(Stack):
         *,
         app_env: str,
         bundle_dir: Path,
+        bedrock_model_id: str,
         env: Environment,
     ) -> None:
         super().__init__(scope, construct_id, env=env)
@@ -65,7 +68,17 @@ class ApiStack(Stack):
             timeout=Duration.seconds(29),  # HTTP API max integration timeout is 30s
             tracing=lambda_.Tracing.ACTIVE,
             log_group=log_group,
-            environment={"APP_ENV": app_env, "LOG_LEVEL": "INFO"},
+            environment={
+                "APP_ENV": app_env,
+                "LOG_LEVEL": "INFO",
+                "BEDROCK_MODEL_ID": bedrock_model_id,
+            },
+        )
+        fn.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+                resources=bedrock_resource_arns(bedrock_model_id, self.region, self.account),
+            )
         )
 
         api = apigw.HttpApi(
@@ -85,3 +98,4 @@ class ApiStack(Stack):
 
         CfnOutput(self, "InvokeUrl", value=f"{api.api_endpoint}/invoke")
         CfnOutput(self, "FunctionName", value=fn.function_name)
+        CfnOutput(self, "BedrockModelId", value=bedrock_model_id)

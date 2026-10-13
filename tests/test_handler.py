@@ -69,3 +69,31 @@ def test_unexpected_error_returns_500(monkeypatch: pytest.MonkeyPatch) -> None:
     status, body = _call(_event({"user_id": "u1", "request": "ping"}))
     assert status == 500
     assert body == {"error": "Internal error"}  # no internal details leak
+
+
+def _fake_tone_model(monkeypatch: pytest.MonkeyPatch, reply: str) -> None:
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from agents.tone import agent as tone_module
+
+    model = GenericFakeChatModel(messages=iter([AIMessage(content=reply)]))
+    monkeypatch.setattr(tone_module, "get_chat_model", lambda: model)
+
+
+def test_tone_request_returns_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_tone_model(monkeypatch, "Could you please send the report?")
+    status, body = _call(
+        _event({"user_id": "u1", "request": "send the report", "inputs": {"tone": "polite"}})
+    )
+    assert status == 200
+    assert body["agent"] == "tone"
+    expected = {"rewritten_text": "Could you please send the report?", "tone": "polite"}
+    assert body["result"] == expected
+
+
+def test_tone_without_target_tone_returns_400(monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_tone_model(monkeypatch, "unused")
+    status, body = _call(_event({"user_id": "u1", "request": "x", "agent": "tone"}))
+    assert status == 400
+    assert "tone" in body["error"]
