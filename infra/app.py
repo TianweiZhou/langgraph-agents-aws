@@ -20,4 +20,7 @@ ApiStack(
     env=cdk.Environment(account=os.environ.get("CDK_DEFAULT_ACCOUNT"), region=REGION),
 )
 
+cdk.Tags.of(app).add("Project", "langgraph-agents-aws")
+cdk.Tags.of(app).add("Environment", app_env)
+
 app.synth()

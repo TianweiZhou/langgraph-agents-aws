@@ -1,11 +1,16 @@
 """HTTP API (IAM auth) -> Lambda running the LangGraph app."""
 
+# CDK's generated (jsii) Python types hide that classes like Role and Function implement
+# their interfaces (IRole, IFunction, ...), so pyright flags valid arguments here.
+# pyright: reportArgumentType=false
+
 from pathlib import Path
 
 from aws_cdk import CfnOutput, Duration, Environment, RemovalPolicy, Stack
 from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_apigatewayv2_authorizers as authorizers
 from aws_cdk import aws_apigatewayv2_integrations as integrations
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
@@ -23,16 +28,35 @@ class ApiStack(Stack):
     ) -> None:
         super().__init__(scope, construct_id, env=env)
 
+        # Explicit names so resources are easy to find in the console.
+        prefix = f"agents-{app_env}"
+        function_name = f"{prefix}-orchestrator"
+
         log_group = logs.LogGroup(
             self,
             "AgentsFnLogs",
+            log_group_name=f"/aws/lambda/{function_name}",
             retention=logs.RetentionDays.TWO_WEEKS,
             removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        role = iam.Role(
+            self,
+            "AgentsFnRole",
+            role_name=f"{function_name}-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                )
+            ],
         )
 
         fn = lambda_.Function(
             self,
             "AgentsFn",
+            function_name=function_name,
+            role=role,
             runtime=lambda_.Runtime.PYTHON_3_12,
             architecture=lambda_.Architecture.ARM_64,
             handler="handler.lambda_handler",
@@ -47,16 +71,15 @@ class ApiStack(Stack):
         api = apigw.HttpApi(
             self,
             "AgentsApi",
-            api_name=f"agents-{app_env}",
+            api_name=f"{prefix}-api",
             default_authorizer=authorizers.HttpIamAuthorizer(),
         )
         api.add_routes(
             path="/invoke",
             methods=[apigw.HttpMethod.POST],
-            # Function implements IFunction; jsii's generated types hide that from pyright.
             integration=integrations.HttpLambdaIntegration(
                 "AgentsFnIntegration",
-                fn,  # pyright: ignore[reportArgumentType]
+                fn,
             ),
         )
 
