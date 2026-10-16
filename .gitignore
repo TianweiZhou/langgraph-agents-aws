@@ -7,8 +7,10 @@ __pycache__/
 
 # Build output
 build/
+build.nosync/
 dist/
 cdk.out/
+cdk.out.nosync/
 
 # Local env and secrets
 .env

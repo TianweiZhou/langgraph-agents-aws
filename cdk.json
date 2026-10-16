@@ -1,7 +1,11 @@
 {
   "app": "uv run --group infra python -m infra.app",
+  "output": "cdk.out.nosync",
   "watch": {
-    "include": ["src/**", "infra/**"]
+    "include": [
+      "src/**",
+      "infra/**"
+    ]
   },
   "context": {
     "env": "dev",
