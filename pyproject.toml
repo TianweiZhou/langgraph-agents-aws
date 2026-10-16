@@ -19,6 +19,9 @@ infra = [
     "aws-cdk-lib>=2.273.0",
     "constructs>=10.8.1",
 ]
+ui = [
+    "streamlit>=1.66.0",
+]
 
 [tool.uv]
 package = false
@@ -26,7 +29,7 @@ package = false
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests", "infra", "evals"]
+src = ["src", "tests", "infra", "evals", "tools"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
@@ -34,8 +37,8 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 [tool.pyright]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
-include = ["src", "tests", "infra", "evals"]
-extraPaths = ["src", "tests"]
+include = ["src", "tests", "infra", "evals", "tools"]
+extraPaths = ["src", "tests", "tools/chat_ui"]
 venvPath = "."
 venv = ".venv"
 # LangGraph ships no stubs and has a few untyped internals; these only flag third-party gaps.

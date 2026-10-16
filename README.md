@@ -53,3 +53,13 @@ AWS_PROFILE=dev BEDROCK_MODEL_ID=us.amazon.nova-2-lite-v1:0 PYTHONPATH=src uv ru
 ```
 
 Runs `evals/tone/cases.jsonl` against the real model and exits non-zero below an 80% pass rate.
+
+## Chat UI (local testing only)
+
+```bash
+uv run --group ui streamlit run tools/chat_ui/app.py
+```
+
+Opens http://localhost:8501. In the sidebar pick the **Target** (`Dev API` = deployed stack, signed with the
+`dev` profile; `Local` = runs the handler on your Mac against real Bedrock), the agent, tone, and audience.
+The `thread_id` shown in the sidebar is the one to search for in CloudWatch logs.
