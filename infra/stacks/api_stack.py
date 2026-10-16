@@ -10,6 +10,7 @@ from aws_cdk import CfnOutput, Duration, Environment, RemovalPolicy, Stack
 from aws_cdk import aws_apigatewayv2 as apigw
 from aws_cdk import aws_apigatewayv2_authorizers as authorizers
 from aws_cdk import aws_apigatewayv2_integrations as integrations
+from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
@@ -43,6 +44,18 @@ class ApiStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
+        # Conversation memory: LangGraph checkpoints per thread (schema set by DynamoDBSaver).
+        conversations = dynamodb.TableV2(
+            self,
+            "ConversationsTable",
+            table_name=f"{prefix}-conversations",
+            partition_key=dynamodb.Attribute(name="PK", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="SK", type=dynamodb.AttributeType.STRING),
+            billing=dynamodb.Billing.on_demand(),
+            time_to_live_attribute="ttl",
+            removal_policy=RemovalPolicy.DESTROY,  # dev only: chats are disposable
+        )
+
         role = iam.Role(
             self,
             "AgentsFnRole",
@@ -72,8 +85,10 @@ class ApiStack(Stack):
                 "APP_ENV": app_env,
                 "LOG_LEVEL": "INFO",
                 "BEDROCK_MODEL_ID": bedrock_model_id,
+                "CHECKPOINT_TABLE": conversations.table_name,
             },
         )
+        conversations.grant_read_write_data(fn)
         fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],

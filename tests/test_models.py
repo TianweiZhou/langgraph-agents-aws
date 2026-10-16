@@ -14,6 +14,7 @@ def _settings(**overrides: str | None) -> Settings:
         "bedrock_model_id": "us.amazon.nova-2-lite-v1:0",
         "guardrail_id": None,
         "guardrail_version": "DRAFT",
+        "checkpoint_table": None,
     }
     base.update(overrides)
     return Settings(**base)  # pyright: ignore[reportArgumentType]

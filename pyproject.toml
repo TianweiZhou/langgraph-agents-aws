@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "langchain-aws>=1.8.2",
     "langgraph>=1.2.14",
+    "langgraph-checkpoint-aws>=1.2.5",
     "pydantic>=2.14.0",
 ]
 

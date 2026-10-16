@@ -11,6 +11,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any, cast
 
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
 from orchestrator.graph import Graph, build_default_graph
@@ -76,6 +77,7 @@ def rewrite(case: Case) -> str:
         "inputs": inputs,
         "agent": "tone",
         "result": None,
+        "messages": [HumanMessage(case.text)],
     }
     final = _graph().invoke(state)
     return str(final["result"]["rewritten_text"])

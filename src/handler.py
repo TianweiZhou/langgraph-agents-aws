@@ -6,12 +6,15 @@ import uuid
 from functools import cache
 from typing import Any
 
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field, ValidationError
 
 from agents.base import InvalidAgentInput
 from orchestrator.graph import Graph, build_default_graph
 from orchestrator.router import UnknownAgentError
 from orchestrator.state import GraphState
+from shared.checkpointer import checkpoint_thread_id, make_checkpointer
 from shared.config import get_settings
 from shared.logging import configure_logging, get_logger, log_context
 
@@ -36,7 +39,7 @@ class InvokeResponse(BaseModel):
 @cache
 def _graph() -> Graph:
     # Built once per Lambda container and reused across warm invocations.
-    return build_default_graph()
+    return build_default_graph(make_checkpointer(get_settings()))
 
 
 def _response(status: int, body: dict[str, Any]) -> dict[str, Any]:
@@ -62,8 +65,12 @@ def _run(req: InvokeRequest) -> InvokeResponse:
         "inputs": req.inputs,
         "agent": req.agent,
         "result": None,
+        "messages": [HumanMessage(req.request)],  # appended to the thread's history
     }
-    final = _graph().invoke(state)
+    config: RunnableConfig = {
+        "configurable": {"thread_id": checkpoint_thread_id(req.user_id, req.thread_id)}
+    }
+    final = _graph().invoke(state, config)
     return InvokeResponse(thread_id=req.thread_id, agent=final["agent"], result=final["result"])
 
 

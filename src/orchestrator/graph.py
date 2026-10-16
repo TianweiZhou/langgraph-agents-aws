@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -38,7 +39,11 @@ def _with_agent_logging(agent: Agent) -> Node:
     return node
 
 
-def build_graph(agents: Sequence[Agent], router: Router) -> Graph:
+def build_graph(
+    agents: Sequence[Agent],
+    router: Router,
+    checkpointer: BaseCheckpointSaver[str] | None = None,
+) -> Graph:
     names = [a.name for a in agents]
     if len(names) != len(set(names)):
         raise ValueError(f"Agent names must be unique: {names}")
@@ -53,8 +58,9 @@ def build_graph(agents: Sequence[Agent], router: Router) -> Graph:
 
     builder.add_edge(START, ROUTER_NODE)
     builder.add_conditional_edges(ROUTER_NODE, _selected_agent, {n: n for n in names})
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)
 
 
-def build_default_graph() -> Graph:
-    return build_graph(ALL_AGENTS, RuleRouter(ALL_AGENTS, default=DEFAULT_AGENT))
+def build_default_graph(checkpointer: BaseCheckpointSaver[str] | None = None) -> Graph:
+    router = RuleRouter(ALL_AGENTS, default=DEFAULT_AGENT)
+    return build_graph(ALL_AGENTS, router, checkpointer)

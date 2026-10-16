@@ -1,5 +1,7 @@
 from typing import Any
 
+from langchain_core.messages import HumanMessage
+
 from orchestrator.state import GraphState
 
 
@@ -13,4 +15,5 @@ def make_state(
         "inputs": inputs,
         "agent": agent,
         "result": None,
+        "messages": [HumanMessage(request)],
     }

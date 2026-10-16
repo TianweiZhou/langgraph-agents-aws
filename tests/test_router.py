@@ -74,3 +74,12 @@ def test_no_intent_match_uses_default() -> None:
 def test_explicit_agent_beats_intent() -> None:
     agents = (_matching("tone", True), _agent("hello"))
     assert RuleRouter(agents, default="hello").choose(make_state(agent="hello")) == "hello"
+
+
+def test_follow_up_stays_with_last_agent() -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    agents = (_agent("tone"), _agent("hello"))
+    state = make_state(request="shorter please")
+    state["messages"] = [HumanMessage("x"), AIMessage("y", name="tone"), HumanMessage("z")]
+    assert RuleRouter(agents, default="hello").choose(state) == "tone"

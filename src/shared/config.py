@@ -13,6 +13,7 @@ class Settings:
     bedrock_model_id: str | None  # model or inference profile id, set by CDK
     guardrail_id: str | None  # Bedrock Guardrail; off when unset
     guardrail_version: str
+    checkpoint_table: str | None  # DynamoDB table for conversation memory
 
 
 @cache
@@ -24,4 +25,5 @@ def get_settings() -> Settings:
         bedrock_model_id=os.environ.get("BEDROCK_MODEL_ID") or None,
         guardrail_id=os.environ.get("GUARDRAIL_ID") or None,
         guardrail_version=os.environ.get("GUARDRAIL_VERSION", "DRAFT"),
+        checkpoint_table=os.environ.get("CHECKPOINT_TABLE") or None,
     )

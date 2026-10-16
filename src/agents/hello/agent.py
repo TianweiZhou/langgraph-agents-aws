@@ -1,5 +1,7 @@
 """Hello-world agent: proves routing and wiring end to end without calling a model."""
 
+from langchain_core.messages import AIMessage
+
 from agents.base import Agent, parse_input
 from agents.hello.schemas import HelloInput, HelloOutput
 from orchestrator.state import GraphState, StateUpdate
@@ -12,7 +14,7 @@ def run(state: GraphState) -> StateUpdate:
     payload = parse_input(HelloInput, state)
     template = load_prompt(NAME)
     output = HelloOutput(message=template.format(text=payload.text))
-    return {"result": output.model_dump()}
+    return {"result": output.model_dump(), "messages": [AIMessage(output.message, name=NAME)]}
 
 
 agent = Agent(
