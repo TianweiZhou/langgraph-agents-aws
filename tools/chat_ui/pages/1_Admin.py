@@ -9,9 +9,11 @@ from admin_data import (
     TABLE,
     RequestRow,
     ThreadRef,
+    compact,
     list_threads,
     load_conversation,
     query_requests,
+    seconds,
     summarize,
 )
 from client import DEFAULT_PROFILE, REGION
@@ -57,12 +59,14 @@ with st.sidebar:
 rows = requests(RANGES[range_label])
 stats = summarize(rows)
 
-cols = st.columns(5)
-cols[0].metric("Requests", stats.requests)
-cols[1].metric("Error rate", f"{stats.error_rate:.0%}", help=f"{stats.errors} errors")
-cols[2].metric("p50 latency", f"{stats.p50_ms} ms")
-cols[3].metric("p95 latency", f"{stats.p95_ms} ms")
-cols[4].metric("Tokens in / out", f"{stats.input_tokens:,} / {stats.output_tokens:,}")
+top = st.columns(3)
+top[0].metric("Requests", stats.requests)
+top[1].metric("Error rate", f"{stats.error_rate:.0%}", help=f"{stats.errors} errors")
+top[2].metric("p50 latency", seconds(stats.p50_ms))
+bottom = st.columns(3)
+bottom[0].metric("p95 latency", seconds(stats.p95_ms))
+bottom[1].metric("Tokens in", compact(stats.input_tokens), help=f"{stats.input_tokens:,}")
+bottom[2].metric("Tokens out", compact(stats.output_tokens), help=f"{stats.output_tokens:,}")
 
 requests_tab, conversations_tab, errors_tab = st.tabs(["Requests", "Conversations", "Errors"])
 

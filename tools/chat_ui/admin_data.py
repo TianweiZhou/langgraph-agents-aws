@@ -65,6 +65,16 @@ class ChatLine:
     text: str
 
 
+def seconds(ms: int) -> str:
+    """Compact latency for a metric tile, e.g. 1800 -> '1.8 s'."""
+    return f"{ms / 1000:.1f} s"
+
+
+def compact(n: int) -> str:
+    """Compact count for a metric tile, e.g. 1245 -> '1.2k'."""
+    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+
+
 def _int(value: str | None) -> int:
     return int(float(value)) if value not in (None, "", "null") else 0
 

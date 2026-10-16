@@ -2,8 +2,10 @@ from langchain_core.messages import AIMessage, HumanMessage
 from tools.chat_ui.admin_data import (
     ChatLine,
     RequestRow,
+    compact,
     conversation_lines,
     parse_insights_rows,
+    seconds,
     summarize,
     thread_refs_from_keys,
 )
@@ -71,3 +73,8 @@ def test_thread_refs_from_keys_dedupes_and_splits() -> None:
 def test_conversation_lines() -> None:
     lines = conversation_lines([HumanMessage("hi"), AIMessage("Hello.", name="tone")])
     assert lines == [ChatLine("user", None, "hi"), ChatLine("assistant", "tone", "Hello.")]
+
+
+def test_compact_formats() -> None:
+    assert (seconds(1800), seconds(622)) == ("1.8 s", "0.6 s")
+    assert (compact(1245), compact(61)) == ("1.2k", "61")
