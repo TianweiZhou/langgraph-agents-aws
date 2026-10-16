@@ -7,6 +7,7 @@ from langchain_core.language_models import BaseChatModel
 
 from shared.config import get_settings
 from shared.guardrails import guardrail_config
+from shared.usage import UsageCallback
 
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MAX_TOKENS = 1024
@@ -28,4 +29,5 @@ def get_chat_model() -> BaseChatModel:
         temperature=DEFAULT_TEMPERATURE,
         max_tokens=DEFAULT_MAX_TOKENS,
         guardrails=guardrail_config(settings),
+        callbacks=[UsageCallback()],
     )

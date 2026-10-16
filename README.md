@@ -63,3 +63,10 @@ uv run --group ui streamlit run tools/chat_ui/app.py
 Opens http://localhost:8501. In the sidebar pick the **Target** (`Dev API` = deployed stack, signed with the
 `dev` profile; `Local` = runs the handler on your Mac against real Bedrock), the agent, tone, and audience.
 The `thread_id` shown in the sidebar is the one to search for in CloudWatch logs.
+
+### Admin page
+
+The chat app has an **Admin** page (sidebar) that reads dev with your `dev` profile:
+request metrics (count, error rate, p50/p95 latency, tokens), a table of recent requests,
+saved conversations from DynamoDB, and recent errors. Requests come from the
+`Request summary` log line the Lambda writes once per request.

@@ -2,6 +2,7 @@
 
 import base64
 import json
+import time
 import uuid
 from functools import cache
 from typing import Any
@@ -17,6 +18,7 @@ from orchestrator.state import GraphState
 from shared.checkpointer import checkpoint_thread_id, make_checkpointer
 from shared.config import get_settings
 from shared.logging import configure_logging, get_logger, log_context
+from shared.usage import Usage, track_usage
 
 configure_logging(get_settings().log_level)
 logger = get_logger(__name__)
@@ -57,6 +59,10 @@ def _parse_body(event: dict[str, Any]) -> InvokeRequest:
     return InvokeRequest.model_validate_json(raw)
 
 
+def _config(req: InvokeRequest) -> RunnableConfig:
+    return {"configurable": {"thread_id": checkpoint_thread_id(req.user_id, req.thread_id)}}
+
+
 def _run(req: InvokeRequest) -> InvokeResponse:
     state: GraphState = {
         "user_id": req.user_id,
@@ -67,30 +73,76 @@ def _run(req: InvokeRequest) -> InvokeResponse:
         "result": None,
         "messages": [HumanMessage(req.request)],  # appended to the thread's history
     }
-    config: RunnableConfig = {
-        "configurable": {"thread_id": checkpoint_thread_id(req.user_id, req.thread_id)}
-    }
-    final = _graph().invoke(state, config)
+    final = _graph().invoke(state, _config(req))
     return InvokeResponse(thread_id=req.thread_id, agent=final["agent"], result=final["result"])
 
 
+def _agent_after_failure(req: InvokeRequest) -> str | None:
+    """The agent the router picked before a failure, for the summary log."""
+    try:
+        return _graph().get_state(_config(req)).values.get("agent")
+    except Exception:
+        return None
+
+
+def _log_summary(
+    *,
+    started: float,
+    status: int,
+    agent: str | None,
+    usage: Usage,
+    user_id: str | None = None,
+    error: str | None = None,
+) -> None:
+    """One line per request: what the admin dashboard reads."""
+    with log_context(agent=agent):
+        logger.info(
+            "Request summary",
+            extra={
+                "user_id": user_id,
+                "status": status,
+                "duration_ms": round((time.perf_counter() - started) * 1000),
+                "model_calls": usage.model_calls,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "error": error,
+            },
+        )
+
+
 def lambda_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
+    started = time.perf_counter()
     try:
         req = _parse_body(event)
     except (ValidationError, ValueError) as exc:
         logger.warning("Invalid request", extra={"error": str(exc)})
+        _log_summary(
+            started=started, status=400, agent=None, usage=Usage(), error="Invalid request body"
+        )
         return _response(400, {"error": "Invalid request body"})
 
-    with log_context(thread_id=req.thread_id):
+    with log_context(thread_id=req.thread_id), track_usage() as usage:
         logger.info("Request received", extra={"user_id": req.user_id})
         try:
             resp = _run(req)
         except (UnknownAgentError, InvalidAgentInput) as exc:
             logger.warning("Rejected request", extra={"error": str(exc)})
-            return _response(400, {"error": str(exc)})
+            status, body = 400, {"error": str(exc)}
         except Exception:
             logger.exception("Request failed")
-            return _response(500, {"error": "Internal error"})
-        with log_context(agent=resp.agent):
-            logger.info("Request completed")
-        return _response(200, resp.model_dump())
+            status, body = 500, {"error": "Internal error"}
+        else:
+            _log_summary(
+                started=started, status=200, agent=resp.agent, usage=usage, user_id=req.user_id
+            )
+            return _response(200, resp.model_dump())
+
+        _log_summary(
+            started=started,
+            status=status,
+            agent=_agent_after_failure(req),
+            usage=usage,
+            user_id=req.user_id,
+            error=body["error"],
+        )
+        return _response(status, body)

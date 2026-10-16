@@ -8,7 +8,6 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from agents.base import Agent, InvalidAgentInput, parse_input
 from agents.tone.schemas import ToneInput, ToneOutput
 from orchestrator.state import GraphState, StateUpdate
-from shared.logging import get_logger
 from shared.models import get_chat_model
 from shared.prompts import load_prompt
 
@@ -16,8 +15,6 @@ NAME = "tone"
 DEFAULT_AUDIENCE = "a general audience"
 HISTORY_TURNS = 6  # earlier messages shown to the model
 _INTENT = re.compile(r"\b(tone|rewrite|rephrase|reword)\b", re.IGNORECASE)
-
-logger = get_logger(__name__)
 
 
 class EmptyModelResponseError(RuntimeError):
@@ -57,14 +54,6 @@ def run(state: GraphState) -> StateUpdate:
     if not rewritten:
         raise EmptyModelResponseError("Model returned an empty rewrite")
 
-    usage = response.usage_metadata
-    logger.info(
-        "Model call finished",
-        extra={
-            "input_tokens": usage["input_tokens"] if usage else None,
-            "output_tokens": usage["output_tokens"] if usage else None,
-        },
-    )
     output = ToneOutput(rewritten_text=rewritten, tone=payload.tone)
     return {"result": output.model_dump(), "messages": [AIMessage(rewritten, name=NAME)]}
 
