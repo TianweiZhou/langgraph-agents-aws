@@ -33,7 +33,11 @@ def _reply(text: str) -> GenericFakeChatModel:
 def test_returns_model_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
     _use_model(monkeypatch, _reply("  Could you please send the report?  "))
     update = run(make_state(request="send me the report", inputs={"tone": "polite"}))
-    expected = {"rewritten_text": "Could you please send the report?", "tone": "polite"}
+    expected = {
+        "rewritten_text": "Could you please send the report?",
+        "tone": "polite",
+        "note": None,
+    }
     assert update.get("result") == expected
     reply = update.get("messages", [])[-1]
     assert (reply.name, reply.text) == ("tone", "Could you please send the report?")

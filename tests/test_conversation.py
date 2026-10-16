@@ -90,6 +90,7 @@ def _settings(table: str | None) -> Settings:
         guardrail_version="DRAFT",
         checkpoint_table=table,
         supervisor_enabled=False,
+        memory_table=None,
     )
 
 

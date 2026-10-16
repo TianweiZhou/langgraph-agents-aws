@@ -71,6 +71,7 @@ def _run(req: InvokeRequest) -> InvokeResponse:
         "inputs": req.inputs,
         "agent": req.agent,
         "result": None,
+        "memory": None,  # recall fills this in each turn
         "messages": [HumanMessage(req.request)],  # appended to the thread's history
     }
     final = _graph().invoke(state, _config(req))

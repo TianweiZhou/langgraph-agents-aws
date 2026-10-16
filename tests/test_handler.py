@@ -88,7 +88,11 @@ def test_tone_request_returns_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert status == 200
     assert body["agent"] == "tone"
-    expected = {"rewritten_text": "Could you please send the report?", "tone": "polite"}
+    expected = {
+        "rewritten_text": "Could you please send the report?",
+        "tone": "polite",
+        "note": None,
+    }
     assert body["result"] == expected
 
 

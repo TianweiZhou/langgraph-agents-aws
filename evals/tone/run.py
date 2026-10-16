@@ -77,6 +77,7 @@ def rewrite(case: Case) -> str:
         "inputs": inputs,
         "agent": "tone",
         "result": None,
+        "memory": None,  # recall fills this in each turn
         "messages": [HumanMessage(case.text)],
     }
     final = _graph().invoke(state)

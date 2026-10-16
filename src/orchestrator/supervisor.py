@@ -14,6 +14,7 @@ from orchestrator.router import Route, RuleRouter, last_agent, requested_agent
 from orchestrator.state import GraphState
 from shared.history import format_history
 from shared.logging import get_logger
+from shared.model_fields import OptionalText
 from shared.models import get_chat_model
 from shared.prompts import load_prompt
 
@@ -25,9 +26,15 @@ class RouteDecision(BaseModel):
 
     agent: str = Field(description="Name of exactly one agent from the list.")
     follow_up: bool = Field(description="True if the message refers to the previous reply.")
-    tone: str | None = Field(default=None, description="Target tone if stated, else null.")
-    text: str | None = Field(
+    tone: OptionalText = Field(default=None, description="Target tone if stated, else null.")
+    text: OptionalText = Field(
         default=None, description="The text to work on, if mixed with an instruction."
+    )
+    recipient: OptionalText = Field(
+        default=None, description="Name of the person the user is writing or replying to."
+    )
+    context: OptionalText = Field(
+        default=None, description="The situation the user describes, e.g. what they said."
     )
     reason: str = Field(description="One short sentence explaining the choice.")
 
@@ -71,7 +78,10 @@ class SupervisorRouter:
             return self._fallback.choose(state)
 
         agent = decision.agent.strip().lower()
-        if decision.follow_up and (previous := last_agent(state)) in self._fallback.names:
+        # Trust the model's pick. Only when it calls something a follow-up but still falls
+        # back to the default agent do we send it to whoever wrote the previous reply.
+        previous = last_agent(state)
+        if decision.follow_up and agent == self._default and previous in self._fallback.names:
             agent = previous
         if agent not in self._fallback.names:
             logger.warning("Supervisor picked unknown agent; using rules", extra={"picked": agent})
@@ -82,4 +92,8 @@ class SupervisorRouter:
             inputs["tone"] = decision.tone
         if decision.text:
             inputs["text"] = decision.text
+        if decision.recipient:
+            inputs["recipient"] = decision.recipient
+        if decision.context:
+            inputs["context"] = decision.context
         return Route(agent, inputs=inputs, reason=decision.reason, router="supervisor")

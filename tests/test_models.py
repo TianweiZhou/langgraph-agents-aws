@@ -16,6 +16,7 @@ def _settings(**overrides: str | None) -> Settings:
         "guardrail_version": "DRAFT",
         "checkpoint_table": None,
         "supervisor_enabled": False,
+        "memory_table": None,
     }
     base.update(overrides)
     return Settings(**base)  # pyright: ignore[reportArgumentType]

@@ -23,3 +23,8 @@ def test_reply_text_picks_the_readable_field() -> None:
     assert reply_text({"result": {"rewritten_text": "Hello."}}) == "Hello."
     assert reply_text({"result": {"message": "Hi!"}}) == "Hi!"
     assert reply_text({"error": "Unknown agent 'x'"}) == "Error: Unknown agent 'x'"
+
+
+def test_reply_text_shows_note_under_rewrite() -> None:
+    body = {"result": {"rewritten_text": "Hi Zoe.", "note": "I don't know Zoe yet."}}
+    assert reply_text(body) == "Hi Zoe.\n\n_I don't know Zoe yet._"

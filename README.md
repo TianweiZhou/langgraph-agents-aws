@@ -32,7 +32,15 @@ uv run pytest
 | Agent | Handles | Inputs |
 | --- | --- | --- |
 | `tone` | Rewrites in a tone; follow-ups like "shorter please" | `request` = text, `inputs.tone`, optional `inputs.audience` |
+| `memory` | "Sara is my manager", "forget Mike", "who is Sara?", "who do you know?" | `request` |
 | `hello` | Greetings, small talk, anything else | `request` |
+
+**Memory.** Two kinds, both in DynamoDB:
+- *Conversation* (`agents-<env>-conversations`): each thread's messages, so follow-ups work. Expires after 30 days.
+- *Long-term, about people* (`agents-<env>-memory`): relationship, how to sound with them, and a log of what
+  happened, per `user_id`, across all threads. The graph runs **recall** before the agent (loads the recipient's
+  profile) and **remember** after it (asks the model what the user just revealed and saves it). Kept on stack delete
+  (`RETAIN`) with point-in-time recovery.
 
 **Routing.** With `SUPERVISOR_ENABLED=true` (set in the deployed stack) an LLM supervisor
 (`src/orchestrator/supervisor.py`) reads the message and recent turns, picks the agent, and pulls out

@@ -29,6 +29,7 @@ class Case(BaseModel):
     follow_up: bool | None = None
     tone: str | None = UNSET
     text_contains: str | None = None
+    recipient: str | None = UNSET
 
 
 def load_cases() -> list[Case]:
@@ -49,6 +50,7 @@ def to_state(case: Case) -> GraphState:
         "inputs": None,
         "agent": None,
         "result": None,
+        "memory": None,  # recall fills this in each turn
         "messages": messages,
     }
 
@@ -70,6 +72,9 @@ def check(case: Case, router: SupervisorRouter) -> list[str]:
     text = route.inputs.get("text")
     if case.text_contains and case.text_contains not in str(text):
         problems.append(f"text={text!r}, expected to contain {case.text_contains!r}")
+    recipient = route.inputs.get("recipient")
+    if case.recipient != UNSET and (recipient or None) != case.recipient:
+        problems.append(f"recipient={recipient!r}, expected {case.recipient!r}")
     print(f"{'PASS' if not problems else 'FAIL'}  {case.id}  -> {route.agent}  ({route.reason})")
     for problem in problems:
         print(f"      {problem}")

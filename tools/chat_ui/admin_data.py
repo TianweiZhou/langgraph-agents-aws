@@ -15,6 +15,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 ENV = "dev"
 LOG_GROUP = f"/aws/lambda/agents-{ENV}-orchestrator"
 TABLE = f"agents-{ENV}-conversations"
+MEMORY_TABLE = f"agents-{ENV}-memory"
 CHECKPOINT_PREFIX = "CHECKPOINT_"  # DynamoDBSaver's partition key prefix for a thread
 
 SUMMARY_QUERY = """fields @timestamp, user_id, thread_id, agent, status, duration_ms,
@@ -183,3 +184,15 @@ def load_conversation(saver: Any, ref: ThreadRef) -> tuple[list[ChatLine], str |
     checkpoint = snapshot.checkpoint
     messages = checkpoint["channel_values"].get("messages", [])
     return conversation_lines(messages), checkpoint.get("ts")
+
+
+def users_with_contacts(namespaces: Iterable[tuple[str, ...]]) -> list[str]:
+    """User ids from store namespaces like ('users', 'me', 'contacts')."""
+    users = {
+        ns[1] for ns in namespaces if len(ns) >= 3 and ns[0] == "users" and ns[2] == "contacts"
+    }
+    return sorted(users)
+
+
+def list_memory_users(store: Any) -> list[str]:
+    return users_with_contacts(store.list_namespaces(prefix=("users",), limit=1000))

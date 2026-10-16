@@ -15,5 +15,6 @@ def make_state(
         "inputs": inputs,
         "agent": agent,
         "result": None,
+        "memory": None,
         "messages": [HumanMessage(request)],
     }

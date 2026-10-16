@@ -19,6 +19,7 @@ class GraphState(TypedDict):
     inputs: dict[str, Any] | None  # agent-specific fields, checked by each agent
     agent: str | None  # chosen by the router
     result: dict[str, Any] | None  # agent output
+    memory: dict[str, Any] | None  # what recall found about the recipient, this turn only
     messages: Annotated[list[AnyMessage], add_messages]  # conversation so far
 
 
@@ -28,6 +29,7 @@ class StateUpdate(TypedDict, total=False):
     agent: str | None
     inputs: dict[str, Any] | None
     result: dict[str, Any] | None
+    memory: dict[str, Any] | None
     messages: list[AnyMessage]
 
 

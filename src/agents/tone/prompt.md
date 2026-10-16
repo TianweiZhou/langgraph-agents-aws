@@ -21,6 +21,17 @@ Follow-ups:
 Target tone: {tone}
 Audience: {audience}
 
+About the recipient (use this to pick the right level of formality and warmth; do not
+mention these notes in the rewrite):
+<recipient>
+{recipient}
+</recipient>
+
+The situation the user described (context only; do not add facts from it to the rewrite):
+<situation>
+{situation}
+</situation>
+
 <text>
 {text}
 </text>

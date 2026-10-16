@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Sequence
+from typing import Any
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
@@ -31,15 +32,44 @@ def _has_previous_rewrite(messages: Sequence[AnyMessage]) -> bool:
     return any(isinstance(m, AIMessage) and m.name == NAME for m in messages)
 
 
+def _recipient_block(state: GraphState, payload: ToneInput) -> str:
+    """What we know about the recipient, from recall, for the prompt."""
+    memory: dict[str, Any] = state["memory"] or {}
+    if not payload.recipient:
+        return "(not given)"
+    lines = [f"Name: {payload.recipient}"]
+    lines.append(f"Known: {memory['profile']}" if memory.get("profile") else "Known: nothing yet")
+    lines.extend(f"Earlier: {event}" for event in memory.get("events", []))
+    return "\n".join(lines)
+
+
+def _tone_instruction(payload: ToneInput, state: GraphState) -> str:
+    if payload.tone:
+        return payload.tone
+    if _has_previous_rewrite(state["messages"]):
+        return "same as your previous rewrite, adjusted as asked"
+    if payload.recipient:
+        return "whatever suits the relationship with the recipient described below"
+    raise InvalidAgentInput("Invalid inputs for ToneInput: tone")
+
+
+def _unknown_recipient_note(payload: ToneInput, state: GraphState) -> str | None:
+    if payload.recipient and not (state["memory"] or {}).get("known"):
+        return (
+            f"I don't know {payload.recipient} yet. Tell me who they are "
+            f"(e.g. '{payload.recipient} is my manager') and I'll remember for next time."
+        )
+    return None
+
+
 def run(state: GraphState) -> StateUpdate:
     payload = parse_input(ToneInput, state)
-    messages = state["messages"]
-    if payload.tone is None and not _has_previous_rewrite(messages):
-        raise InvalidAgentInput("Invalid inputs for ToneInput: tone")
     prompt = load_prompt(NAME).format(
-        history=format_history(messages),
-        tone=payload.tone or "same as your previous rewrite, adjusted as asked",
-        audience=payload.audience or DEFAULT_AUDIENCE,
+        history=format_history(state["messages"]),
+        tone=_tone_instruction(payload, state),
+        audience=payload.audience or payload.recipient or DEFAULT_AUDIENCE,
+        recipient=_recipient_block(state, payload),
+        situation=payload.context or "(not given)",
         text=payload.text,
     )
     response = get_chat_model().invoke([HumanMessage(prompt)])
@@ -47,7 +77,11 @@ def run(state: GraphState) -> StateUpdate:
     if not rewritten:
         raise EmptyModelResponseError("Model returned an empty rewrite")
 
-    output = ToneOutput(rewritten_text=rewritten, tone=payload.tone)
+    output = ToneOutput(
+        rewritten_text=rewritten,
+        tone=payload.tone,
+        note=_unknown_recipient_note(payload, state),
+    )
     return {"result": output.model_dump(), "messages": [AIMessage(rewritten, name=NAME)]}
 
 

@@ -10,7 +10,7 @@ import streamlit as st
 from client import ChatClient, ChatReply, ChatRequest, DevApiClient, LocalClient
 
 TARGETS = {"Dev API": DevApiClient, "Local": LocalClient}
-AGENTS = {"Auto (router decides)": None, "tone": "tone", "hello": "hello"}
+AGENTS = {"Auto (supervisor decides)": None, "tone": "tone", "memory": "memory", "hello": "hello"}
 
 
 @st.cache_resource
@@ -48,12 +48,21 @@ with st.sidebar:
         'e.g. "make this formal: ...". Leave empty to let it decide.',
     )
     audience = st.text_input("Audience (optional)")
+    recipient = st.text_input(
+        "Recipient (optional)",
+        help="Who you're writing to. The supervisor also picks this up from "
+        '"replying to Sara: ...". Known people get the tone that suits them.',
+    )
     st.divider()
     st.caption(f"thread_id: `{st.session_state.thread_id}`")
     st.button("New thread", on_click=new_thread)
 
 st.title("Agents chat")
-st.caption('Try "make this formal: hey send me the deck", then "shorter please".')
+st.caption(
+    'Try "Sara is my manager, keep it formal but warm", then '
+    '"replying to Sara, she asked why the report is late. '
+    'my draft: sorry got busy, will send tmrw".'
+)
 
 for message in st.session_state.messages:
     show(message)
@@ -70,6 +79,7 @@ if text := st.chat_input("Type a message..."):
         agent=AGENTS[agent_label],
         tone=tone.strip() or None,
         audience=audience.strip() or None,
+        recipient=recipient.strip() or None,
     )
     with st.spinner("Thinking..."):
         try:

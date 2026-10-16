@@ -23,6 +23,13 @@ STACK_NAME = "AgentsApi-dev"
 DEFAULT_PROFILE = "dev"
 
 
+def ensure_src_on_path() -> None:
+    """Let the testing tools import the app's own modules from src/."""
+    src = str(ROOT / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+
+
 @dataclass(frozen=True)
 class ChatRequest:
     user_id: str
@@ -31,6 +38,7 @@ class ChatRequest:
     agent: str | None = None
     tone: str | None = None
     audience: str | None = None
+    recipient: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,7 +59,8 @@ def build_body(req: ChatRequest) -> dict[str, Any]:
     body: dict[str, Any] = {"user_id": req.user_id, "thread_id": req.thread_id, "request": req.text}
     if req.agent:
         body["agent"] = req.agent
-    inputs = {k: v for k, v in (("tone", req.tone), ("audience", req.audience)) if v}
+    fields = (("tone", req.tone), ("audience", req.audience), ("recipient", req.recipient))
+    inputs = {k: v for k, v in fields if v}
     if inputs:
         body["inputs"] = inputs
     return body
@@ -64,7 +73,8 @@ def reply_text(body: dict[str, Any]) -> str:
     result: dict[str, Any] = body.get("result") or {}
     for key in ("rewritten_text", "message"):
         if key in result:
-            return str(result[key])
+            note = result.get("note")
+            return str(result[key]) + (f"\n\n_{note}_" if note else "")
     return json.dumps(result)
 
 
@@ -133,9 +143,8 @@ class LocalClient:
         os.environ.setdefault("AWS_REGION", REGION)
         os.environ.setdefault("BEDROCK_MODEL_ID", _cdk_model_id())
         os.environ.setdefault("SUPERVISOR_ENABLED", "true")  # match the deployed stack
-        src = str(ROOT / "src")
-        if src not in sys.path:
-            sys.path.insert(0, src)
+        # Local target: memory lives in this process only (no MEMORY_TABLE).
+        ensure_src_on_path()
         import handler
 
         self._handler: Any = handler

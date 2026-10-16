@@ -56,6 +56,18 @@ def test_follow_up_goes_to_previous_agent() -> None:
     assert route.agent == "tone"
 
 
+def test_new_request_after_memory_reply_is_not_forced_back_to_memory() -> None:
+    """Bug seen live: 'replying to Sara ...' right after 'Sara is my manager' went to memory."""
+    state = make_state(request="replying to Sara: will send tmrw")
+    state["messages"] = [
+        HumanMessage("Sara is my manager"),
+        AIMessage("Got it.", name="memory"),
+        HumanMessage("replying to Sara: will send tmrw"),
+    ]
+    route = _router(_FakeDecide(agent="tone", follow_up=True, recipient="Sara")).choose(state)
+    assert (route.agent, route.inputs.get("recipient")) == ("tone", "Sara")
+
+
 def test_greeting_is_not_forced_into_last_agent() -> None:
     """The bug the supervisor fixes: 'ping' after a rewrite went to the tone agent."""
     state = make_state(request="ping")

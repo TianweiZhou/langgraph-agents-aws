@@ -56,6 +56,21 @@ class ApiStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,  # dev only: chats are disposable
         )
 
+        # Long-term memory about people (LangGraph store; schema set by DynamoDBStore).
+        memory = dynamodb.TableV2(
+            self,
+            "MemoryTable",
+            table_name=f"{prefix}-memory",
+            partition_key=dynamodb.Attribute(name="PK", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="SK", type=dynamodb.AttributeType.STRING),
+            billing=dynamodb.Billing.on_demand(),
+            time_to_live_attribute="expires_at",
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True  # memories are worth keeping
+            ),
+            removal_policy=RemovalPolicy.RETAIN,  # survives a stack delete
+        )
+
         role = iam.Role(
             self,
             "AgentsFnRole",
@@ -87,9 +102,11 @@ class ApiStack(Stack):
                 "BEDROCK_MODEL_ID": bedrock_model_id,
                 "CHECKPOINT_TABLE": conversations.table_name,
                 "SUPERVISOR_ENABLED": "true",
+                "MEMORY_TABLE": memory.table_name,
             },
         )
         conversations.grant_read_write_data(fn)
+        memory.grant_read_write_data(fn)
         fn.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],

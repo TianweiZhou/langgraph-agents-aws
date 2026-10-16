@@ -8,6 +8,7 @@ from tools.chat_ui.admin_data import (
     seconds,
     summarize,
     thread_refs_from_keys,
+    users_with_contacts,
 )
 
 
@@ -78,3 +79,13 @@ def test_conversation_lines() -> None:
 def test_compact_formats() -> None:
     assert (seconds(1800), seconds(622)) == ("1.8 s", "0.6 s")
     assert (compact(1245), compact(61)) == ("1.2k", "61")
+
+
+def test_users_with_contacts() -> None:
+    namespaces = [
+        ("users", "me", "contacts"),
+        ("users", "me", "events", "sara"),
+        ("users", "u2", "contacts"),
+        ("other", "x", "contacts"),
+    ]
+    assert users_with_contacts(namespaces) == ["me", "u2"]

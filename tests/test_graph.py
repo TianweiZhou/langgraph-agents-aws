@@ -48,5 +48,5 @@ def test_build_graph_rejects_duplicate_names() -> None:
 
 def test_build_graph_rejects_reserved_name() -> None:
     agents = (_agent("router"),)
-    with pytest.raises(ValueError, match="reserved"):
+    with pytest.raises(ValueError, match="reserved"):  # also recall / remember
         build_graph(agents, RuleRouter(agents, default="router"))
