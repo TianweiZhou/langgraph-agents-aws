@@ -19,7 +19,7 @@ def run(state: GraphState) -> StateUpdate:
 
 agent = Agent(
     name=NAME,
-    description="Fallback agent that greets the user and echoes their request.",
+    description="Greets the user and handles small talk or anything no other agent covers.",
     input_model=HelloInput,
     output_model=HelloOutput,
     node=run,

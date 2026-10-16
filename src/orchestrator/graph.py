@@ -10,6 +10,8 @@ from agents.base import Agent
 from agents.registry import ALL_AGENTS, DEFAULT_AGENT
 from orchestrator.router import Router, RuleRouter, make_router_node
 from orchestrator.state import GraphState, Node, StateUpdate
+from orchestrator.supervisor import SupervisorRouter
+from shared.config import get_settings
 from shared.logging import get_logger, log_context
 
 ROUTER_NODE = "router"
@@ -61,6 +63,12 @@ def build_graph(
     return builder.compile(checkpointer=checkpointer)
 
 
+def default_router() -> Router:
+    """LLM supervisor when SUPERVISOR_ENABLED is set, keyword rules otherwise."""
+    if get_settings().supervisor_enabled:
+        return SupervisorRouter(ALL_AGENTS, default=DEFAULT_AGENT)
+    return RuleRouter(ALL_AGENTS, default=DEFAULT_AGENT)
+
+
 def build_default_graph(checkpointer: BaseCheckpointSaver[str] | None = None) -> Graph:
-    router = RuleRouter(ALL_AGENTS, default=DEFAULT_AGENT)
-    return build_graph(ALL_AGENTS, router, checkpointer)
+    return build_graph(ALL_AGENTS, default_router(), checkpointer)

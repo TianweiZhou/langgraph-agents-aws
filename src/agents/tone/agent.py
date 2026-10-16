@@ -8,12 +8,12 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from agents.base import Agent, InvalidAgentInput, parse_input
 from agents.tone.schemas import ToneInput, ToneOutput
 from orchestrator.state import GraphState, StateUpdate
+from shared.history import format_history
 from shared.models import get_chat_model
 from shared.prompts import load_prompt
 
 NAME = "tone"
 DEFAULT_AUDIENCE = "a general audience"
-HISTORY_TURNS = 6  # earlier messages shown to the model
 _INTENT = re.compile(r"\b(tone|rewrite|rephrase|reword)\b", re.IGNORECASE)
 
 
@@ -25,13 +25,6 @@ def matches(state: GraphState) -> bool:
     """Pick this agent when a target tone is given or the request asks for a rewrite."""
     inputs = state["inputs"] or {}
     return "tone" in inputs or bool(_INTENT.search(state["request"]))
-
-
-def format_history(messages: Sequence[AnyMessage]) -> str:
-    """Earlier turns of the thread (the current message excluded), oldest first."""
-    earlier = messages[:-1][-HISTORY_TURNS:]
-    lines = [f"{'Assistant' if isinstance(m, AIMessage) else 'User'}: {m.text}" for m in earlier]
-    return "\n".join(lines) or "(none)"
 
 
 def _has_previous_rewrite(messages: Sequence[AnyMessage]) -> bool:
@@ -60,7 +53,10 @@ def run(state: GraphState) -> StateUpdate:
 
 agent = Agent(
     name=NAME,
-    description="Rewrites text in a requested tone (e.g. formal, friendly) keeping its meaning.",
+    description=(
+        "Rewrites a message or draft in a requested tone (formal, friendly, polite, ...) "
+        "without changing its meaning; also adjusts its previous rewrite on request."
+    ),
     input_model=ToneInput,
     output_model=ToneOutput,
     node=run,

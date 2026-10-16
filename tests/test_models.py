@@ -7,7 +7,7 @@ from shared.guardrails import guardrail_config
 
 
 def _settings(**overrides: str | None) -> Settings:
-    base: dict[str, str | None] = {
+    base: dict[str, str | bool | None] = {
         "app_env": "test",
         "aws_region": "us-east-1",
         "log_level": "INFO",
@@ -15,6 +15,7 @@ def _settings(**overrides: str | None) -> Settings:
         "guardrail_id": None,
         "guardrail_version": "DRAFT",
         "checkpoint_table": None,
+        "supervisor_enabled": False,
     }
     base.update(overrides)
     return Settings(**base)  # pyright: ignore[reportArgumentType]

@@ -26,6 +26,7 @@ class StateUpdate(TypedDict, total=False):
     """Partial update a node returns. LangGraph merges it into `GraphState`."""
 
     agent: str | None
+    inputs: dict[str, Any] | None
     result: dict[str, Any] | None
     messages: list[AnyMessage]
 

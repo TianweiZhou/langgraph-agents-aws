@@ -26,12 +26,12 @@ AGENTS = (_agent("hello"), _agent("tone"))
 
 def test_falls_back_to_default_when_no_agent_requested() -> None:
     router = RuleRouter(AGENTS, default="hello")
-    assert router.choose(make_state()) == "hello"
+    assert router.choose(make_state()).agent == "hello"
 
 
 def test_uses_requested_agent() -> None:
     router = RuleRouter(AGENTS, default="hello")
-    assert router.choose(make_state(agent="tone")) == "tone"
+    assert router.choose(make_state(agent="tone")).agent == "tone"
 
 
 def test_rejects_unknown_requested_agent() -> None:
@@ -47,7 +47,7 @@ def test_rejects_unknown_default() -> None:
 
 def test_router_node_writes_choice_to_state() -> None:
     node = make_router_node(RuleRouter(AGENTS, default="hello"))
-    assert node(make_state()) == {"agent": "hello"}
+    assert node(make_state()) == {"agent": "hello", "inputs": None}
 
 
 def _matching(name: str, hit: bool) -> Agent:
@@ -63,17 +63,17 @@ def _matching(name: str, hit: bool) -> Agent:
 
 def test_intent_match_beats_default() -> None:
     agents = (_matching("tone", True), _agent("hello"))
-    assert RuleRouter(agents, default="hello").choose(make_state()) == "tone"
+    assert RuleRouter(agents, default="hello").choose(make_state()).agent == "tone"
 
 
 def test_no_intent_match_uses_default() -> None:
     agents = (_matching("tone", False), _agent("hello"))
-    assert RuleRouter(agents, default="hello").choose(make_state()) == "hello"
+    assert RuleRouter(agents, default="hello").choose(make_state()).agent == "hello"
 
 
 def test_explicit_agent_beats_intent() -> None:
     agents = (_matching("tone", True), _agent("hello"))
-    assert RuleRouter(agents, default="hello").choose(make_state(agent="hello")) == "hello"
+    assert RuleRouter(agents, default="hello").choose(make_state(agent="hello")).agent == "hello"
 
 
 def test_follow_up_stays_with_last_agent() -> None:
@@ -82,4 +82,4 @@ def test_follow_up_stays_with_last_agent() -> None:
     agents = (_agent("tone"), _agent("hello"))
     state = make_state(request="shorter please")
     state["messages"] = [HumanMessage("x"), AIMessage("y", name="tone"), HumanMessage("z")]
-    assert RuleRouter(agents, default="hello").choose(state) == "tone"
+    assert RuleRouter(agents, default="hello").choose(state).agent == "tone"

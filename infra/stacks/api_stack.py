@@ -86,6 +86,7 @@ class ApiStack(Stack):
                 "LOG_LEVEL": "INFO",
                 "BEDROCK_MODEL_ID": bedrock_model_id,
                 "CHECKPOINT_TABLE": conversations.table_name,
+                "SUPERVISOR_ENABLED": "true",
             },
         )
         conversations.grant_read_write_data(fn)

@@ -29,10 +29,16 @@ uv run pytest
 
 ## Agents
 
-| Agent | Picked when | Inputs |
+| Agent | Handles | Inputs |
 | --- | --- | --- |
-| `tone` | `agent: "tone"`, or `inputs.tone` is set, or the request says rewrite/rephrase/reword/tone | `request` = text, `inputs.tone`, optional `inputs.audience` |
-| `hello` | fallback | `request` |
+| `tone` | Rewrites in a tone; follow-ups like "shorter please" | `request` = text, `inputs.tone`, optional `inputs.audience` |
+| `hello` | Greetings, small talk, anything else | `request` |
+
+**Routing.** With `SUPERVISOR_ENABLED=true` (set in the deployed stack) an LLM supervisor
+(`src/orchestrator/supervisor.py`) reads the message and recent turns, picks the agent, and pulls out
+the tone and text from messages like `make this formal: hey send the deck`. An explicit `agent` skips
+it. If the model call fails, the keyword `RuleRouter` decides instead. Routing evals:
+`PYTHONPATH=src uv run python -m evals.supervisor.run` (same env vars as the tone evals).
 
 Example request body:
 

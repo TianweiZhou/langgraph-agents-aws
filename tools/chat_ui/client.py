@@ -132,6 +132,7 @@ class LocalClient:
         os.environ.setdefault("AWS_PROFILE", DEFAULT_PROFILE)
         os.environ.setdefault("AWS_REGION", REGION)
         os.environ.setdefault("BEDROCK_MODEL_ID", _cdk_model_id())
+        os.environ.setdefault("SUPERVISOR_ENABLED", "true")  # match the deployed stack
         src = str(ROOT / "src")
         if src not in sys.path:
             sys.path.insert(0, src)

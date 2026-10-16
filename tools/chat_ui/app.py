@@ -42,19 +42,23 @@ with st.sidebar:
     st.header("Settings")
     target = st.radio("Target", list(TARGETS), help="Dev API = deployed stack. Local = this Mac.")
     agent_label = st.selectbox("Agent", list(AGENTS))
-    tone = st.text_input("Tone", value="formal", help="Leave empty to skip.")
+    tone = st.text_input(
+        "Tone (optional)",
+        help="Overrides the tone the supervisor picks up from your message, "
+        'e.g. "make this formal: ...". Leave empty to let it decide.',
+    )
     audience = st.text_input("Audience (optional)")
     st.divider()
     st.caption(f"thread_id: `{st.session_state.thread_id}`")
     st.button("New thread", on_click=new_thread)
 
 st.title("Agents chat")
-st.caption("Each message goes through the router. Use the sidebar to pick the agent and tone.")
+st.caption('Try "make this formal: hey send me the deck", then "shorter please".')
 
 for message in st.session_state.messages:
     show(message)
 
-if text := st.chat_input("Type text to rewrite..."):
+if text := st.chat_input("Type a message..."):
     user_message = {"role": "user", "text": text}
     st.session_state.messages.append(user_message)
     show(user_message)

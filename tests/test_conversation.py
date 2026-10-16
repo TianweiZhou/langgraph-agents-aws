@@ -12,11 +12,11 @@ from langgraph_checkpoint_aws import DynamoDBSaver
 
 import handler
 from agents.tone import agent as tone_module
-from agents.tone.agent import format_history
 from helpers import make_state
 from orchestrator.router import last_agent
 from shared.checkpointer import checkpoint_thread_id, make_checkpointer
 from shared.config import Settings
+from shared.history import format_history
 
 
 class _Recorder:
@@ -89,6 +89,7 @@ def _settings(table: str | None) -> Settings:
         guardrail_id=None,
         guardrail_version="DRAFT",
         checkpoint_table=table,
+        supervisor_enabled=False,
     )
 
 
