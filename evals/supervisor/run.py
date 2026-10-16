@@ -1,4 +1,4 @@
-"""Check the supervisor's routing decisions against real Bedrock.
+"""Check the supervisor's first decision for each message against real Bedrock.
 
 Usage (from the repo root):
     AWS_PROFILE=dev BEDROCK_MODEL_ID=us.amazon.nova-2-lite-v1:0 \
@@ -8,13 +8,14 @@ Usage (from the repo root):
 import json
 import sys
 from pathlib import Path
+from typing import Literal
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel, Field
 
-from agents.registry import ALL_AGENTS, DEFAULT_AGENT
-from orchestrator.state import GraphState
-from orchestrator.supervisor import SupervisorRouter
+from agents.registry import ALL_AGENTS
+from orchestrator.state import GraphState, new_turn
+from orchestrator.supervisor import Supervisor
 
 HERE = Path(__file__).resolve().parent
 PASS_RATE = 0.9
@@ -24,9 +25,10 @@ UNSET = "unset"  # a case field left out is not checked
 class Case(BaseModel):
     id: str
     message: str
-    history: list[tuple[str, str]] = Field(default_factory=list[tuple[str, str]])  # (speaker, text)
-    agent: str
-    follow_up: bool | None = None
+    history: list[tuple[str, str]] = Field(default_factory=list[tuple[str, str]])
+    action: Literal["route", "respond"] = "route"
+    agent: str | None = None
+    more_steps: bool | None = None
     tone: str | None = UNSET
     text_contains: str | None = None
     recipient: str | None = UNSET
@@ -38,53 +40,50 @@ def load_cases() -> list[Case]:
 
 
 def to_state(case: Case) -> GraphState:
-    messages: list[AnyMessage] = [
+    state = new_turn("eval", f"eval-{case.id}", case.message)
+    earlier: list[AnyMessage] = [
         HumanMessage(text) if speaker == "user" else AIMessage(text, name=speaker)
         for speaker, text in case.history
     ]
-    messages.append(HumanMessage(case.message))
-    return {
-        "user_id": "eval",
-        "thread_id": f"eval-{case.id}",
-        "request": case.message,
-        "inputs": None,
-        "agent": None,
-        "result": None,
-        "memory": None,  # recall fills this in each turn
-        "messages": messages,
-    }
+    state["messages"] = [*earlier, *state["messages"]]
+    return state
 
 
-def check(case: Case, router: SupervisorRouter) -> list[str]:
+def _matches(expected: str | None, got: str | None) -> bool:
+    if expected is None or got is None:
+        return expected is None and got is None
+    return expected.lower() in got.lower()
+
+
+def check(case: Case, supervisor: Supervisor) -> list[str]:
     """Problems with the decision for `case`; empty means pass."""
-    route = router.choose(to_state(case))
+    decision, model_call = supervisor.decide(to_state(case))
     problems: list[str] = []
-    if route.router != "supervisor":
-        problems.append("fell back to rules")
-    if route.agent != case.agent:
-        problems.append(f"agent={route.agent}, expected {case.agent}")
-    tone = route.inputs.get("tone")
-    if case.tone != UNSET:
-        expected = case.tone.lower() if case.tone else None
-        got = tone.lower() if isinstance(tone, str) else None
-        if (expected is None) != (got is None) or (expected and got and expected not in got):
-            problems.append(f"tone={tone!r}, expected {case.tone!r}")
-    text = route.inputs.get("text")
-    if case.text_contains and case.text_contains not in str(text):
-        problems.append(f"text={text!r}, expected to contain {case.text_contains!r}")
-    recipient = route.inputs.get("recipient")
-    if case.recipient != UNSET and (recipient or None) != case.recipient:
-        problems.append(f"recipient={recipient!r}, expected {case.recipient!r}")
-    print(f"{'PASS' if not problems else 'FAIL'}  {case.id}  -> {route.agent}  ({route.reason})")
+    if not model_call:
+        problems.append("fell back (no usable model decision)")
+    if decision.action != case.action:
+        problems.append(f"action={decision.action}, expected {case.action}")
+    if case.action == "route" and decision.agent != case.agent:
+        problems.append(f"agent={decision.agent}, expected {case.agent}")
+    if case.more_steps is not None and decision.more_steps != case.more_steps:
+        problems.append(f"more_steps={decision.more_steps}, expected {case.more_steps}")
+    if case.tone != UNSET and not _matches(case.tone, decision.tone):
+        problems.append(f"tone={decision.tone!r}, expected {case.tone!r}")
+    if case.text_contains and case.text_contains not in str(decision.text):
+        problems.append(f"text={decision.text!r}, expected to contain {case.text_contains!r}")
+    if case.recipient != UNSET and not _matches(case.recipient, decision.recipient):
+        problems.append(f"recipient={decision.recipient!r}, expected {case.recipient!r}")
+    target = decision.agent or decision.action
+    print(f"{'PASS' if not problems else 'FAIL'}  {case.id}  -> {target}  ({decision.reason})")
     for problem in problems:
         print(f"      {problem}")
     return problems
 
 
 def main() -> int:
-    router = SupervisorRouter(ALL_AGENTS, default=DEFAULT_AGENT)
+    supervisor = Supervisor(ALL_AGENTS)
     cases = load_cases()
-    passed = sum(not check(case, router) for case in cases)
+    passed = sum(not check(case, supervisor) for case in cases)
     rate = passed / len(cases)
     print(json.dumps({"passed": passed, "total": len(cases), "pass_rate": round(rate, 2)}))
     return 0 if rate >= PASS_RATE else 1

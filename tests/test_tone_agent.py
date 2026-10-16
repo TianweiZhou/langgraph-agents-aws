@@ -39,8 +39,7 @@ def test_returns_model_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
         "note": None,
     }
     assert update.get("result") == expected
-    reply = update.get("messages", [])[-1]
-    assert (reply.name, reply.text) == ("tone", "Could you please send the report?")
+    assert update.get("reply") == "Could you please send the report?"
     ToneOutput.model_validate(update.get("result"))
 
 

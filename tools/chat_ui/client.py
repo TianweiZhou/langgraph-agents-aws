@@ -35,18 +35,15 @@ class ChatRequest:
     user_id: str
     thread_id: str
     text: str
-    agent: str | None = None
-    tone: str | None = None
-    audience: str | None = None
-    recipient: str | None = None
 
 
 @dataclass(frozen=True)
 class ChatReply:
     status: int
-    agent: str | None
+    route: list[str]  # agents the supervisor used, in order
     text: str
     seconds: float
+    request_id: str | None
     body: dict[str, Any]
 
 
@@ -55,35 +52,26 @@ class ChatClient(Protocol):
 
 
 def build_body(req: ChatRequest) -> dict[str, Any]:
-    """The JSON body the API expects."""
-    body: dict[str, Any] = {"user_id": req.user_id, "thread_id": req.thread_id, "request": req.text}
-    if req.agent:
-        body["agent"] = req.agent
-    fields = (("tone", req.tone), ("audience", req.audience), ("recipient", req.recipient))
-    inputs = {k: v for k, v in fields if v}
-    if inputs:
-        body["inputs"] = inputs
-    return body
+    """The JSON body the API expects. Only the message: the supervisor works out the rest."""
+    return {"user_id": req.user_id, "thread_id": req.thread_id, "request": req.text}
 
 
 def reply_text(body: dict[str, Any]) -> str:
     """The human-readable part of an API response."""
     if "error" in body:
         return f"Error: {body['error']}"
-    result: dict[str, Any] = body.get("result") or {}
-    for key in ("rewritten_text", "message"):
-        if key in result:
-            note = result.get("note")
-            return str(result[key]) + (f"\n\n_{note}_" if note else "")
-    return json.dumps(result)
+    note = body.get("note")
+    return str(body.get("reply", "")) + (f"\n\n_{note}_" if note else "")
 
 
 def _reply(status: int, body: dict[str, Any], started: float) -> ChatReply:
+    route: list[str] = body.get("route") or []
     return ChatReply(
         status=status,
-        agent=body.get("agent"),
+        route=route,
         text=reply_text(body),
         seconds=time.perf_counter() - started,
+        request_id=body.get("request_id"),
         body=body,
     )
 
@@ -142,7 +130,6 @@ class LocalClient:
         os.environ.setdefault("AWS_PROFILE", DEFAULT_PROFILE)
         os.environ.setdefault("AWS_REGION", REGION)
         os.environ.setdefault("BEDROCK_MODEL_ID", _cdk_model_id())
-        os.environ.setdefault("SUPERVISOR_ENABLED", "true")  # match the deployed stack
         # Local target: memory lives in this process only (no MEMORY_TABLE).
         ensure_src_on_path()
         import handler

@@ -2,9 +2,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from tools.chat_ui.admin_data import (
     ChatLine,
     RequestRow,
+    TraceStep,
     compact,
     conversation_lines,
+    flow_dot,
     parse_insights_rows,
+    parse_trace_rows,
     seconds,
     summarize,
     thread_refs_from_keys,
@@ -20,9 +23,10 @@ def test_parse_insights_rows() -> None:
     results = [
         [
             _field("@timestamp", "2026-10-16 18:40:00.000"),
+            _field("request_id", "r1"),
             _field("user_id", "me"),
             _field("thread_id", "t1"),
-            _field("agent", "tone"),
+            _field("route", "memory > tone"),
             _field("status", "200"),
             _field("duration_ms", "812"),
             _field("input_tokens", "250"),
@@ -35,12 +39,8 @@ def test_parse_insights_rows() -> None:
         ],
     ]
     first, second = parse_insights_rows(results)
-    assert (first.agent, first.status, first.duration_ms, first.input_tokens) == (
-        "tone",
-        200,
-        812,
-        250,
-    )
+    assert (first.route, first.request_id, first.status) == ("memory > tone", "r1", 200)
+    assert (first.duration_ms, first.input_tokens) == (812, 250)
     assert (second.user_id, second.status, second.error, second.duration_ms) == (
         None,
         400,
@@ -50,7 +50,7 @@ def test_parse_insights_rows() -> None:
 
 
 def _row(status: int, duration_ms: int, tokens: int = 0) -> RequestRow:
-    return RequestRow("ts", "u", "t", "tone", status, duration_ms, tokens, tokens, None)
+    return RequestRow("ts", "r", "u", "t", "tone", status, duration_ms, tokens, tokens, None)
 
 
 def test_summarize() -> None:
@@ -89,3 +89,42 @@ def test_users_with_contacts() -> None:
         ("other", "x", "contacts"),
     ]
     assert users_with_contacts(namespaces) == ["me", "u2"]
+
+
+def test_parse_trace_rows_sorted_with_json() -> None:
+    results = [
+        [
+            _field("step", "2"),
+            _field("node", "tone"),
+            _field("next", "supervisor"),
+            _field("duration_ms", "500"),
+            _field("received", '{"request": "x"}'),
+            _field("produced", '{"reply": "y"}'),
+        ],
+        [
+            _field("step", "1"),
+            _field("node", "supervisor"),
+            _field("next", "recall"),
+            _field("duration_ms", "900"),
+            _field("received", "{}"),
+            _field("produced", "not json"),
+        ],
+    ]
+    first, second = parse_trace_rows(results)
+    assert (first.step, first.node, first.produced) == (1, "supervisor", {"raw": "not json"})
+    assert (second.received, second.produced) == ({"request": "x"}, {"reply": "y"})
+
+
+def test_flow_dot_numbers_the_path() -> None:
+    steps = [
+        TraceStep(1, "supervisor", "recall", 900, {}, {}),
+        TraceStep(2, "recall", "tone", 0, {}, {}),
+        TraceStep(3, "tone", "supervisor", 500, {}, {}),
+        TraceStep(4, "supervisor", "remember", 0, {}, {}),
+        TraceStep(5, "remember", "end", 1, {}, {}),
+    ]
+    dot = flow_dot(steps, ["tone", "memory"])
+    assert '"recall" -> "tone" [label="2"' in dot
+    assert '"remember" -> "end" [label="5"' in dot
+    assert '"memory" [fillcolor="#f3f4f6"' in dot  # not on the path, greyed out
+    assert '"tone" [fillcolor="#dbeafe"' in dot

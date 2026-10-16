@@ -27,32 +27,31 @@ uv run pytest
 - `infra/` - CDK app
 - `tests/` - unit tests (Bedrock is mocked)
 
-## Agents
+## How it works
 
-| Agent | Handles | Inputs |
-| --- | --- | --- |
-| `tone` | Rewrites in a tone; follow-ups like "shorter please" | `request` = text, `inputs.tone`, optional `inputs.audience` |
-| `memory` | "Sara is my manager", "forget Mike", "who is Sara?", "who do you know?" | `request` |
-| `hello` | Greetings, small talk, anything else | `request` |
+You only talk to the **supervisor** (`src/orchestrator/supervisor.py`). For each message it decides,
+in a loop, to send work to an agent, reply itself (greetings, questions, clarifying questions), or
+finish. Agents report back to it; one message can use several agents, up to 4 steps.
 
-**Memory.** Two kinds, both in DynamoDB:
-- *Conversation* (`agents-<env>-conversations`): each thread's messages, so follow-ups work. Expires after 30 days.
-- *Long-term, about people* (`agents-<env>-memory`): relationship, how to sound with them, and a log of what
-  happened, per `user_id`, across all threads. The graph runs **recall** before the agent (loads the recipient's
-  profile) and **remember** after it (asks the model what the user just revealed and saves it). Kept on stack delete
-  (`RETAIN`) with point-in-time recovery.
+```
+START -> supervisor -> recall -> <agent> -> supervisor -> ... -> remember -> END
+```
 
-**Routing.** With `SUPERVISOR_ENABLED=true` (set in the deployed stack) an LLM supervisor
-(`src/orchestrator/supervisor.py`) reads the message and recent turns, picks the agent, and pulls out
-the tone and text from messages like `make this formal: hey send the deck`. An explicit `agent` skips
-it. If the model call fails, the keyword `RuleRouter` decides instead. Routing evals:
-`PYTHONPATH=src uv run python -m evals.supervisor.run` (same env vars as the tone evals).
+| Agent | Handles |
+| --- | --- |
+| `tone` | Rewrites a message or draft in a tone; edits its previous rewrite ("shorter please") |
+| `memory` | "Sara is my manager", "forget Mike", "who is Sara?", "who do you know?" |
 
-Example request body:
+Request and response:
 
 ```json
-{"user_id": "u1", "request": "hey send me the report", "inputs": {"tone": "formal", "audience": "my manager"}}
+{"user_id": "u1", "thread_id": "t1", "request": "replying to Sara: sorry, will send tmrw"}
+{"thread_id": "t1", "request_id": "...", "reply": "...", "route": ["tone"], "note": null, "result": {...}}
 ```
+
+`inputs` (e.g. `{"tone": "formal"}`) is accepted as an optional hint. Every graph step writes a
+`Trace step` log line (request id, step, node, what it received and produced, next node) that the
+Admin page's **Flow** tab draws. `TRACE_CONTENT=false` keeps message text out of traces.
 
 ## Model
 
@@ -74,13 +73,14 @@ Runs `evals/tone/cases.jsonl` against the real model and exits non-zero below an
 uv run --group ui streamlit run tools/chat_ui/app.py
 ```
 
-Opens http://localhost:8501. In the sidebar pick the **Target** (`Dev API` = deployed stack, signed with the
-`dev` profile; `Local` = runs the handler on your Mac against real Bedrock), the agent, tone, and audience.
-The `thread_id` shown in the sidebar is the one to search for in CloudWatch logs.
+Opens http://localhost:8501. You chat with the supervisor; pick the **Target** in the sidebar
+(`Dev API` = deployed stack, signed with the `dev` profile; `Local` = runs the handler on your Mac
+against real Bedrock). Each reply shows the route it took and its request id.
 
 ### Admin page
 
 The chat app has an **Admin** page (sidebar) that reads dev with your `dev` profile:
-request metrics (count, error rate, p50/p95 latency, tokens), a table of recent requests,
-saved conversations from DynamoDB, and recent errors. Requests come from the
-`Request summary` log line the Lambda writes once per request.
+- **Flow**: pick a request, see the path it took through the graph (numbered), and one card per
+  step with what arrived, the supervisor's decision and reason, what it produced, and where it went next.
+- **Requests**, **Conversations**, **People** (long-term memory, with Forget), **Errors**, plus
+  metrics (count, error rate, p50/p95 latency, tokens).

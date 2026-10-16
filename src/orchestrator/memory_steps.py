@@ -19,7 +19,7 @@ from shared.prompts import load_prompt
 
 logger = get_logger(__name__)
 
-MEMORY_AGENT = "memory"  # handles its own saving; remember skips it
+MEMORY_AGENT = "memory"  # saves on its own; remember skips turns where only it ran
 
 
 def recipient_of(state: GraphState) -> str | None:
@@ -32,6 +32,13 @@ def make_recall_node(memory: Callable[[], PeopleMemory] | None = None) -> Node:
         name = recipient_of(state)
         if name is None:
             return {"memory": None}
+        loaded = state["memory"] or {}
+        if (
+            loaded.get("recipient") == name
+            and state["done"]
+            and state["done"][-1]["agent"] != MEMORY_AGENT
+        ):
+            return {}  # already loaded earlier this turn and nothing changed it
         try:
             people = (memory or get_people_memory)()
             contact = people.get_contact(state["user_id"], name)
@@ -80,7 +87,7 @@ def extract_with_model(prompt: str) -> MemoryNote:
 def _remember_prompt(state: GraphState, name: str) -> str:
     known: dict[str, Any] = state["memory"] or {}
     inputs = state["inputs"] or {}
-    reply = state["messages"][-1].text if state["messages"] else ""
+    reply = state["reply"] or ""
     return load_prompt("remember", kind="orchestrator").format(
         recipient=name,
         profile=known.get("profile") or "(nothing yet)",
@@ -96,8 +103,10 @@ def make_remember_node(
 ) -> Node:
     def remember(state: GraphState) -> StateUpdate:
         name = recipient_of(state)
-        if name is None or state["agent"] == MEMORY_AGENT:
-            return {}
+        ran = {d["agent"] for d in state["done"]}
+        follow_up = bool((state["inputs"] or {}).get("follow_up"))  # an edit, not an event
+        if name is None or not ran or ran == {MEMORY_AGENT} or follow_up:
+            return {"saved": None}
         try:
             note = (extract or extract_with_model)(_remember_prompt(state, name))
             people = (memory or get_people_memory)()
@@ -112,12 +121,11 @@ def make_remember_node(
                 )
             if note.event:
                 people.add_event(state["user_id"], name, note.event, state["thread_id"])
-            logger.info(
-                "Remembered",
-                extra={"recipient": name, "profile_changed": profile_changed, "event": note.event},
-            )
+            saved = {"recipient": name, "profile_changed": profile_changed, "event": note.event}
+            logger.info("Remembered", extra=saved)
+            return {"saved": saved}
         except Exception:
-            logger.warning("Remember failed; reply already sent", exc_info=True)
-        return {}
+            logger.warning("Remember failed; the reply still goes out", exc_info=True)
+            return {"saved": None}
 
     return remember

@@ -7,15 +7,13 @@ Usage (from the repo root):
 
 import json
 import sys
-from functools import cache
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
-from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 
-from orchestrator.graph import Graph, build_default_graph
-from orchestrator.state import GraphState
+from agents.tone import agent as tone_agent
+from orchestrator.state import new_turn
 from shared.models import get_chat_model
 
 HERE = Path(__file__).resolve().parent
@@ -61,27 +59,11 @@ def load_cases() -> list[Case]:
     return [Case.model_validate_json(line) for line in lines if line.strip()]
 
 
-@cache
-def _graph() -> Graph:
-    return build_default_graph()
-
-
 def rewrite(case: Case) -> str:
-    inputs: dict[str, Any] = {"tone": case.tone}
-    if case.audience:
-        inputs["audience"] = case.audience
-    state: GraphState = {
-        "user_id": "eval",
-        "thread_id": f"eval-{case.id}",
-        "request": case.text,
-        "inputs": inputs,
-        "agent": "tone",
-        "result": None,
-        "memory": None,  # recall fills this in each turn
-        "messages": [HumanMessage(case.text)],
-    }
-    final = _graph().invoke(state)
-    return str(final["result"]["rewritten_text"])
+    """Run the tone agent on its own (agent-level eval; no supervisor)."""
+    state = new_turn("eval", f"eval-{case.id}", case.text)
+    state["inputs"] = {"tone": case.tone, **({"audience": case.audience} if case.audience else {})}
+    return str(tone_agent.run(state).get("reply") or "")
 
 
 def judge(case: Case, rewritten: str) -> JudgeScore:

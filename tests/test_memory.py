@@ -14,8 +14,9 @@ from agents.base import InvalidAgentInput
 from agents.memory.agent import carry_out, make_node
 from agents.memory.schemas import MemoryCommand
 from agents.tone import agent as tone_module
-from helpers import make_state
+from helpers import Script, decision, make_state
 from orchestrator import memory_steps
+from orchestrator import supervisor as supervisor_module
 from orchestrator.memory_steps import MemoryNote, make_recall_node, make_remember_node
 from shared.memory import Contact, PeopleMemory, get_people_memory, name_key
 
@@ -97,8 +98,12 @@ def test_remember_saves_what_the_model_found() -> None:
     note = MemoryNote(relationship="manager", event="Sara asked about the report")
     remember = make_remember_node(lambda: people, lambda prompt: note)
     state = make_state(request="replying to Sara, my manager", inputs={"recipient": "Sara"})
-    state["agent"] = "tone"
-    remember(state)
+    state["done"] = [{"agent": "tone", "reply": "Hi Sara"}]
+    assert remember(state).get("saved") == {
+        "recipient": "Sara",
+        "profile_changed": True,
+        "event": "Sara asked about the report",
+    }
     assert (people.get_contact("u1", "Sara") or Contact("x")).relationship == "manager"
     assert [e.summary for e in people.recent_events("u1", "Sara")] == [
         "Sara asked about the report"
@@ -114,11 +119,16 @@ def test_remember_skips_memory_agent_and_missing_recipient() -> None:
 
     remember = make_remember_node(_people, extract)
     no_recipient = make_state()
-    no_recipient["agent"] = "tone"
+    no_recipient["done"] = [{"agent": "tone", "reply": "x"}]
     remember(no_recipient)
-    memory_turn = make_state(inputs={"recipient": "Sara"})
-    memory_turn["agent"] = "memory"
-    remember(memory_turn)
+    memory_only = make_state(inputs={"recipient": "Sara"})
+    memory_only["done"] = [{"agent": "memory", "reply": "Got it."}]
+    remember(memory_only)
+    edit = make_state(inputs={"recipient": "Sara", "follow_up": True})
+    edit["done"] = [{"agent": "tone", "reply": "shorter"}]
+    remember(edit)  # an edit to a rewrite is not an event
+    nothing_ran = make_state(inputs={"recipient": "Sara"})
+    remember(nothing_ran)
     assert calls == []
 
 
@@ -127,8 +137,8 @@ def test_remember_never_fails_the_request() -> None:
         raise RuntimeError("bedrock down")
 
     state = make_state(inputs={"recipient": "Sara"})
-    state["agent"] = "tone"
-    assert make_remember_node(_people, broken)(state) == {}
+    state["done"] = [{"agent": "tone", "reply": "x"}]
+    assert make_remember_node(_people, broken)(state) == {"saved": None}
 
 
 # --- memory agent --------------------------------------------------------
@@ -162,12 +172,24 @@ def test_memory_agent_needs_a_name() -> None:
         carry_out(_cmd(action="remember"), _people(), "u1")
 
 
-def test_memory_agent_node_replies_and_records_message() -> None:
+def test_memory_agent_node_uses_its_task_and_replies() -> None:
     people = _people()
-    node = make_node(lambda prompt: _cmd(action="remember", name="Mike"), lambda: people)
-    update = node(make_state(request="Mike is my brother"))
+    prompts: list[str] = []
+
+    def interpret(prompt: str) -> MemoryCommand:
+        prompts.append(prompt)
+        return _cmd(action="remember", name="Mike", relationship="brother")
+
+    node = make_node(interpret, lambda: people)
+    state = make_state(
+        request="Mike is my brother. Tell him: dinner at 7",
+        inputs={"task": "Remember: Mike is the user's brother"},
+    )
+    update = node(state)
     assert (update.get("result") or {})["action"] == "remember"
-    assert update.get("messages", [])[-1].name == "memory"
+    assert update.get("reply") == "Got it. Mike: brother."
+    assert "Remember: Mike is the user's brother" in prompts[0]
+    assert "dinner at 7" not in prompts[0]  # only its part of the message
 
 
 # --- tone agent uses memory ------------------------------------------------
@@ -216,8 +238,8 @@ def test_tone_notes_unknown_recipient(monkeypatch: pytest.MonkeyPatch) -> None:
 # --- end to end through the handler ------------------------------------------
 
 
-def _send(user_id: str, request: str, **extra: Any) -> dict[str, Any]:
-    body = {"user_id": user_id, "thread_id": f"t-{uuid.uuid4().hex}", "request": request, **extra}
+def _send(user_id: str, request: str) -> dict[str, Any]:
+    body = {"user_id": user_id, "thread_id": f"t-{uuid.uuid4().hex}", "request": request}
     resp = handler.lambda_handler({"body": json.dumps(body)}, None)
     return {"status": resp["statusCode"], **json.loads(resp["body"])}
 
@@ -232,14 +254,24 @@ def test_memory_carries_across_threads(monkeypatch: pytest.MonkeyPatch) -> None:
     def extract(prompt: str) -> MemoryNote:
         return MemoryNote()
 
+    monkeypatch.setattr(
+        supervisor_module,
+        "decide_with_model",
+        Script(
+            [
+                decision(action="route", agent="memory", task="Sara is the user's manager"),
+                decision(action="route", agent="tone", recipient="Sara", text="will send tmrw"),
+            ]
+        ),
+    )
     monkeypatch.setattr("agents.memory.agent.interpret_with_model", interpret)
-    told = _send(user, "Sara is my manager", agent="memory")
-    assert (told["status"], told["agent"]) == (200, "memory")
+    told = _send(user, "Sara is my manager")
+    assert (told["status"], told["route"]) == (200, ["memory"])
 
     recorder = _Recorder()
     monkeypatch.setattr(tone_module, "get_chat_model", lambda: recorder)
     monkeypatch.setattr(memory_steps, "extract_with_model", extract)
-    reply = _send(user, "will send tmrw", agent="tone", inputs={"recipient": "Sara"})
-    assert reply["status"] == 200
+    reply = _send(user, "replying to Sara: will send tmrw")
+    assert (reply["status"], reply["route"]) == (200, ["tone"])
     assert "Known: Sara: manager" in recorder.prompt
     assert get_people_memory().get_contact(user, "Sara") is not None

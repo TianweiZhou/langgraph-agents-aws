@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 
 from helpers import make_state
-from orchestrator.graph import build_default_graph
 from shared.logging import JsonFormatter, log_context
 
 
@@ -37,10 +36,27 @@ def test_extra_fields_are_included() -> None:
     assert _format("hi", user_id="u1")["user_id"] == "u1"
 
 
-def test_agent_logs_carry_thread_id_and_agent(caplog: pytest.LogCaptureFixture) -> None:
+def test_agent_logs_carry_request_thread_and_agent(caplog: pytest.LogCaptureFixture) -> None:
+    from pydantic import BaseModel
+
+    from agents.base import Agent
+    from helpers import Script, decision
+    from orchestrator.graph import build_graph
+    from orchestrator.state import GraphState, StateUpdate
+    from shared.logging import get_logger
+
+    class _Model(BaseModel):
+        pass
+
+    def node(state: GraphState) -> StateUpdate:
+        get_logger("test.agent").info("Agent working")
+        return {"reply": "done"}
+
+    agent = Agent(name="tone", description="t", input_model=_Model, output_model=_Model, node=node)
+    graph = build_graph([agent], decide=Script([decision(action="route", agent="tone")]))
     formatter = JsonFormatter()
-    with caplog.at_level(logging.INFO), log_context(thread_id="t1"):
-        build_default_graph().invoke(make_state())
+    with caplog.at_level(logging.INFO), log_context(request_id="r1", thread_id="t1"):
+        graph.invoke(make_state())
     lines = [json.loads(formatter.format(r)) for r in caplog.records]
-    started = next(line for line in lines if line["message"] == "Agent started")
-    assert (started["thread_id"], started["agent"]) == ("t1", "hello")
+    working = next(line for line in lines if line["message"] == "Agent working")
+    assert (working["request_id"], working["thread_id"], working["agent"]) == ("r1", "t1", "tone")

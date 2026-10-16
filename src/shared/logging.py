@@ -10,8 +10,9 @@ from typing import Any
 
 _thread_id: ContextVar[str | None] = ContextVar("thread_id", default=None)
 _agent: ContextVar[str | None] = ContextVar("agent", default=None)
+_request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 
-_CONTEXT_FIELDS = ("thread_id", "agent")
+_CONTEXT_FIELDS = ("request_id", "thread_id", "agent")
 _STANDARD_ATTRS = frozenset(logging.makeLogRecord({}).__dict__) | {"message", "asctime"}
 _base_factory = logging.getLogRecordFactory()
 
@@ -19,6 +20,7 @@ _base_factory = logging.getLogRecordFactory()
 def _record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
     """Stamp the current context onto each record when it is created."""
     record = _base_factory(*args, **kwargs)
+    record.request_id = _request_id.get()
     record.thread_id = _thread_id.get()
     record.agent = _agent.get()
     return record
@@ -57,9 +59,13 @@ def get_logger(name: str) -> logging.Logger:
 
 
 @contextmanager
-def log_context(*, thread_id: str | None = None, agent: str | None = None) -> Generator[None]:
-    """Attach `thread_id` and/or `agent` to every log line inside the block."""
+def log_context(
+    *, request_id: str | None = None, thread_id: str | None = None, agent: str | None = None
+) -> Generator[None]:
+    """Attach `request_id`, `thread_id`, and/or `agent` to every log line inside the block."""
     tokens: list[tuple[ContextVar[str | None], Token[str | None]]] = []
+    if request_id is not None:
+        tokens.append((_request_id, _request_id.set(request_id)))
     if thread_id is not None:
         tokens.append((_thread_id, _thread_id.set(thread_id)))
     if agent is not None:

@@ -1,20 +1,29 @@
+from collections.abc import Iterable
 from typing import Any
 
-from langchain_core.messages import HumanMessage
+from orchestrator.state import GraphState, new_turn
+from orchestrator.supervisor import Decision
 
-from orchestrator.state import GraphState
+
+def make_state(request: str = "hi", inputs: dict[str, Any] | None = None) -> GraphState:
+    state = new_turn("u1", "t1", request)
+    state["inputs"] = inputs
+    return state
 
 
-def make_state(
-    request: str = "hi", agent: str | None = None, inputs: dict[str, Any] | None = None
-) -> GraphState:
-    return {
-        "user_id": "u1",
-        "thread_id": "t1",
-        "request": request,
-        "inputs": inputs,
-        "agent": agent,
-        "result": None,
-        "memory": None,
-        "messages": [HumanMessage(request)],
-    }
+def decision(**fields: Any) -> Decision:
+    return Decision.model_validate({"reason": "test", **fields})
+
+
+class Script:
+    """Fake supervisor model: returns the given decisions in order and records prompts."""
+
+    def __init__(self, decisions: Iterable[Decision]) -> None:
+        self._decisions = list(decisions)
+        self.prompts: list[str] = []
+
+    def __call__(self, prompt: str) -> Decision:
+        self.prompts.append(prompt)
+        if not self._decisions:
+            raise AssertionError("Supervisor asked for more decisions than scripted")
+        return self._decisions.pop(0)

@@ -28,8 +28,16 @@ def matches(state: GraphState) -> bool:
     return "tone" in inputs or bool(_INTENT.search(state["request"]))
 
 
+def _previous_rewrite(messages: Sequence[AnyMessage]) -> str | None:
+    """This agent's most recent rewrite in the thread, if any."""
+    for message in reversed(messages):
+        if isinstance(message, AIMessage) and message.name == NAME:
+            return message.text
+    return None
+
+
 def _has_previous_rewrite(messages: Sequence[AnyMessage]) -> bool:
-    return any(isinstance(m, AIMessage) and m.name == NAME for m in messages)
+    return _previous_rewrite(messages) is not None
 
 
 def _recipient_block(state: GraphState, payload: ToneInput) -> str:
@@ -50,7 +58,11 @@ def _tone_instruction(payload: ToneInput, state: GraphState) -> str:
         return "same as your previous rewrite, adjusted as asked"
     if payload.recipient:
         return "whatever suits the relationship with the recipient described below"
-    raise InvalidAgentInput("Invalid inputs for ToneInput: tone")
+    raise InvalidAgentInput(
+        "Invalid inputs for ToneInput: tone",
+        ask="Which tone should I use? For example formal, friendly, or casual. "
+        "Or tell me who it's for.",
+    )
 
 
 def _unknown_recipient_note(payload: ToneInput, state: GraphState) -> str | None:
@@ -64,13 +76,20 @@ def _unknown_recipient_note(payload: ToneInput, state: GraphState) -> str | None
 
 def run(state: GraphState) -> StateUpdate:
     payload = parse_input(ToneInput, state)
+    inputs = state["inputs"] or {}
+    previous = _previous_rewrite(state["messages"])
+    text, tone = payload.text, _tone_instruction(payload, state)
+    if inputs.get("follow_up") and previous:
+        # A requested change: rework the previous rewrite, spelled out for the model.
+        text = previous
+        tone = f"{payload.tone or 'keep the same tone'}, and apply this change: {state['request']}"
     prompt = load_prompt(NAME).format(
         history=format_history(state["messages"]),
-        tone=_tone_instruction(payload, state),
+        tone=tone,
         audience=payload.audience or payload.recipient or DEFAULT_AUDIENCE,
         recipient=_recipient_block(state, payload),
         situation=payload.context or "(not given)",
-        text=payload.text,
+        text=text,
     )
     response = get_chat_model().invoke([HumanMessage(prompt)])
     rewritten = response.text.strip()
@@ -82,7 +101,7 @@ def run(state: GraphState) -> StateUpdate:
         tone=payload.tone,
         note=_unknown_recipient_note(payload, state),
     )
-    return {"result": output.model_dump(), "messages": [AIMessage(rewritten, name=NAME)]}
+    return {"result": output.model_dump(), "reply": rewritten}
 
 
 agent = Agent(

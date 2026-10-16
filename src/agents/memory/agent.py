@@ -3,8 +3,6 @@
 from collections.abc import Callable
 from typing import cast
 
-from langchain_core.messages import AIMessage
-
 from agents.base import Agent, InvalidAgentInput, parse_input
 from agents.memory.schemas import MemoryCommand, MemoryInput, MemoryOutput
 from orchestrator.state import GraphState, Node, StateUpdate
@@ -31,7 +29,9 @@ def carry_out(command: MemoryCommand, people: PeopleMemory, user_id: str) -> str
         return "People I know:\n" + "\n".join(f"- {c.describe()}" for c in contacts)
 
     if not command.name:
-        raise InvalidAgentInput("Invalid inputs for memory: name")
+        raise InvalidAgentInput(
+            "Invalid inputs for memory: name", ask="Who do you mean? Please give me their name."
+        )
 
     if command.action == "remember":
         contact = people.update_contact(
@@ -67,11 +67,13 @@ def make_node(
 
     def run(state: GraphState) -> StateUpdate:
         payload = parse_input(MemoryInput, state)
-        prompt = load_prompt(NAME).format(text=payload.text)
+        # The supervisor hands over just the memory part of a mixed message.
+        task = (state["inputs"] or {}).get("task")
+        prompt = load_prompt(NAME).format(text=task or payload.text)
         command = (interpret or interpret_with_model)(prompt)
         reply = carry_out(command, (memory or get_people_memory)(), state["user_id"])
         output = MemoryOutput(message=reply, action=command.action)
-        return {"result": output.model_dump(), "messages": [AIMessage(reply, name=NAME)]}
+        return {"result": output.model_dump(), "reply": reply}
 
     return run
 

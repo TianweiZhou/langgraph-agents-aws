@@ -7,17 +7,15 @@ import uuid
 from functools import cache
 from typing import Any
 
-from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field, ValidationError
 
-from agents.base import InvalidAgentInput
 from orchestrator.graph import Graph, build_default_graph
-from orchestrator.router import UnknownAgentError
-from orchestrator.state import GraphState
+from orchestrator.state import new_turn
 from shared.checkpointer import checkpoint_thread_id, make_checkpointer
 from shared.config import get_settings
 from shared.logging import configure_logging, get_logger, log_context
+from shared.tracing import trace_request
 from shared.usage import Usage, track_usage
 
 configure_logging(get_settings().log_level)
@@ -28,14 +26,17 @@ class InvokeRequest(BaseModel):
     user_id: str = Field(min_length=1)
     thread_id: str = Field(default_factory=lambda: str(uuid.uuid4()), min_length=1)
     request: str = Field(min_length=1)
-    agent: str | None = None  # optional: ask for a specific agent
-    inputs: dict[str, Any] | None = None  # agent-specific fields, e.g. {"tone": "formal"}
+    # Optional hints for the supervisor, e.g. {"tone": "formal", "recipient": "Sara"}.
+    inputs: dict[str, Any] | None = None
 
 
 class InvokeResponse(BaseModel):
     thread_id: str
-    agent: str
-    result: dict[str, Any]
+    request_id: str
+    reply: str  # what the supervisor says back
+    route: list[str]  # agents that worked on this message, in order
+    note: str | None  # a hint for the user, if any (e.g. unknown recipient)
+    result: dict[str, Any] | None  # the last agent's full output
 
 
 @cache
@@ -63,44 +64,38 @@ def _config(req: InvokeRequest) -> RunnableConfig:
     return {"configurable": {"thread_id": checkpoint_thread_id(req.user_id, req.thread_id)}}
 
 
-def _run(req: InvokeRequest) -> InvokeResponse:
-    state: GraphState = {
-        "user_id": req.user_id,
-        "thread_id": req.thread_id,
-        "request": req.request,
-        "inputs": req.inputs,
-        "agent": req.agent,
-        "result": None,
-        "memory": None,  # recall fills this in each turn
-        "messages": [HumanMessage(req.request)],  # appended to the thread's history
-    }
+def _run(req: InvokeRequest, request_id: str) -> InvokeResponse:
+    state = new_turn(req.user_id, req.thread_id, req.request)
+    state["inputs"] = req.inputs
     final = _graph().invoke(state, _config(req))
-    return InvokeResponse(thread_id=req.thread_id, agent=final["agent"], result=final["result"])
-
-
-def _agent_after_failure(req: InvokeRequest) -> str | None:
-    """The agent the router picked before a failure, for the summary log."""
-    try:
-        return _graph().get_state(_config(req)).values.get("agent")
-    except Exception:
-        return None
+    result: dict[str, Any] | None = final["result"]
+    done: list[dict[str, Any]] = final["done"]
+    return InvokeResponse(
+        thread_id=req.thread_id,
+        request_id=request_id,
+        reply=final["reply"] or "",
+        route=[str(d["agent"]) for d in done],
+        note=(result or {}).get("note"),
+        result=result,
+    )
 
 
 def _log_summary(
     *,
     started: float,
     status: int,
-    agent: str | None,
+    route: list[str],
     usage: Usage,
     user_id: str | None = None,
     error: str | None = None,
 ) -> None:
     """One line per request: what the admin dashboard reads."""
-    with log_context(agent=agent):
+    with log_context(agent=route[-1] if route else None):
         logger.info(
             "Request summary",
             extra={
                 "user_id": user_id,
+                "route": " > ".join(route) or "supervisor",
                 "status": status,
                 "duration_ms": round((time.perf_counter() - started) * 1000),
                 "model_calls": usage.model_calls,
@@ -113,37 +108,37 @@ def _log_summary(
 
 def lambda_handler(event: dict[str, Any], context: object) -> dict[str, Any]:
     started = time.perf_counter()
+    request_id = getattr(context, "aws_request_id", None) or uuid.uuid4().hex
     try:
         req = _parse_body(event)
     except (ValidationError, ValueError) as exc:
-        logger.warning("Invalid request", extra={"error": str(exc)})
-        _log_summary(
-            started=started, status=400, agent=None, usage=Usage(), error="Invalid request body"
-        )
-        return _response(400, {"error": "Invalid request body"})
+        with log_context(request_id=request_id):
+            logger.warning("Invalid request", extra={"error": str(exc)})
+            _log_summary(
+                started=started, status=400, route=[], usage=Usage(), error="Invalid request body"
+            )
+        return _response(400, {"error": "Invalid request body", "request_id": request_id})
 
-    with log_context(thread_id=req.thread_id), track_usage() as usage:
+    with (
+        log_context(request_id=request_id, thread_id=req.thread_id),
+        track_usage() as usage,
+        trace_request(),
+    ):
         logger.info("Request received", extra={"user_id": req.user_id})
         try:
-            resp = _run(req)
-        except (UnknownAgentError, InvalidAgentInput) as exc:
-            logger.warning("Rejected request", extra={"error": str(exc)})
-            status, body = 400, {"error": str(exc)}
+            resp = _run(req, request_id)
         except Exception:
             logger.exception("Request failed")
-            status, body = 500, {"error": "Internal error"}
-        else:
             _log_summary(
-                started=started, status=200, agent=resp.agent, usage=usage, user_id=req.user_id
+                started=started,
+                status=500,
+                route=[],
+                usage=usage,
+                user_id=req.user_id,
+                error="Internal error",
             )
-            return _response(200, resp.model_dump())
-
+            return _response(500, {"error": "Internal error", "request_id": request_id})
         _log_summary(
-            started=started,
-            status=status,
-            agent=_agent_after_failure(req),
-            usage=usage,
-            user_id=req.user_id,
-            error=body["error"],
+            started=started, status=200, route=resp.route, usage=usage, user_id=req.user_id
         )
-        return _response(status, body)
+        return _response(200, resp.model_dump())

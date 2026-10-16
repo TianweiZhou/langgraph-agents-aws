@@ -8,6 +8,8 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 import handler
+from helpers import Script, decision
+from orchestrator import supervisor as supervisor_module
 from shared.usage import UsageCallback, track_usage
 
 
@@ -37,7 +39,10 @@ def test_callback_outside_tracking_is_ignored() -> None:
 
 def _summaries(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
     return [
-        {k: getattr(r, k, None) for k in ("status", "agent", "error", "duration_ms", "user_id")}
+        {
+            k: getattr(r, k, None)
+            for k in ("status", "route", "error", "duration_ms", "user_id", "request_id")
+        }
         for r in caplog.records
         if r.getMessage() == "Request summary"
     ]
@@ -47,22 +52,18 @@ def _call(body: dict[str, Any]) -> None:
     handler.lambda_handler({"body": json.dumps(body)}, None)
 
 
-def test_summary_logged_for_success(caplog: pytest.LogCaptureFixture) -> None:
+def test_summary_logged_for_success(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(
+        supervisor_module, "decide_with_model", Script([decision(action="respond", reply="Hi")])
+    )
     with caplog.at_level(logging.INFO):
         _call({"user_id": "u1", "thread_id": f"t-{uuid.uuid4().hex}", "request": "ping"})
     [summary] = _summaries(caplog)
-    assert (summary["status"], summary["agent"], summary["user_id"]) == (200, "hello", "u1")
+    assert (summary["status"], summary["route"], summary["user_id"]) == (200, "supervisor", "u1")
     assert isinstance(summary["duration_ms"], int)
-
-
-def test_summary_names_agent_that_rejected(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.INFO):
-        _call(
-            {"user_id": "u1", "thread_id": f"t-{uuid.uuid4().hex}", "request": "x", "agent": "tone"}
-        )
-    [summary] = _summaries(caplog)
-    assert (summary["status"], summary["agent"]) == (400, "tone")
-    assert "tone" in summary["error"]
+    assert summary["request_id"]
 
 
 def test_summary_logged_for_bad_body(caplog: pytest.LogCaptureFixture) -> None:

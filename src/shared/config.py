@@ -14,7 +14,7 @@ class Settings:
     guardrail_id: str | None  # Bedrock Guardrail; off when unset
     guardrail_version: str
     checkpoint_table: str | None  # DynamoDB table for conversation memory
-    supervisor_enabled: bool  # LLM supervisor picks the agent; rules when off
+    trace_content: bool  # include (shortened) message text in trace logs
     memory_table: str | None  # DynamoDB table for long-term memory about people
 
 
@@ -28,6 +28,6 @@ def get_settings() -> Settings:
         guardrail_id=os.environ.get("GUARDRAIL_ID") or None,
         guardrail_version=os.environ.get("GUARDRAIL_VERSION", "DRAFT"),
         checkpoint_table=os.environ.get("CHECKPOINT_TABLE") or None,
-        supervisor_enabled=os.environ.get("SUPERVISOR_ENABLED", "").lower() in ("1", "true", "yes"),
+        trace_content=os.environ.get("TRACE_CONTENT", "true").lower() in ("1", "true", "yes"),
         memory_table=os.environ.get("MEMORY_TABLE") or None,
     )

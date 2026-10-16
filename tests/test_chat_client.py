@@ -1,30 +1,16 @@
 from tools.chat_ui.client import ChatRequest, build_body, reply_text
 
 
-def test_body_has_only_what_was_set() -> None:
+def test_body_is_just_the_message() -> None:
     body = build_body(ChatRequest(user_id="u1", thread_id="t1", text="hi"))
     assert body == {"user_id": "u1", "thread_id": "t1", "request": "hi"}
 
 
-def test_body_carries_agent_and_inputs() -> None:
-    req = ChatRequest(
-        user_id="u1", thread_id="t1", text="hi", agent="tone", tone="formal", audience="boss"
-    )
-    assert build_body(req) == {
-        "user_id": "u1",
-        "thread_id": "t1",
-        "request": "hi",
-        "agent": "tone",
-        "inputs": {"tone": "formal", "audience": "boss"},
-    }
+def test_reply_text() -> None:
+    assert reply_text({"reply": "Hello."}) == "Hello."
+    assert reply_text({"error": "Invalid request body"}) == "Error: Invalid request body"
 
 
-def test_reply_text_picks_the_readable_field() -> None:
-    assert reply_text({"result": {"rewritten_text": "Hello."}}) == "Hello."
-    assert reply_text({"result": {"message": "Hi!"}}) == "Hi!"
-    assert reply_text({"error": "Unknown agent 'x'"}) == "Error: Unknown agent 'x'"
-
-
-def test_reply_text_shows_note_under_rewrite() -> None:
-    body = {"result": {"rewritten_text": "Hi Zoe.", "note": "I don't know Zoe yet."}}
+def test_reply_text_shows_note_under_reply() -> None:
+    body = {"reply": "Hi Zoe.", "note": "I don't know Zoe yet."}
     assert reply_text(body) == "Hi Zoe.\n\n_I don't know Zoe yet._"

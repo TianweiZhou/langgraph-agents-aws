@@ -1,6 +1,8 @@
-"""Local chat page for testing the agents. Run from the repo root:
+"""Local chat page for testing. You talk to the supervisor; it decides which agents to use.
 
-uv run --group ui streamlit run tools/chat_ui/app.py
+Run from the repo root:
+
+    uv run --group ui streamlit run tools/chat_ui/app.py
 """
 
 import uuid
@@ -10,7 +12,7 @@ import streamlit as st
 from client import ChatClient, ChatReply, ChatRequest, DevApiClient, LocalClient
 
 TARGETS = {"Dev API": DevApiClient, "Local": LocalClient}
-AGENTS = {"Auto (supervisor decides)": None, "tone": "tone", "memory": "memory", "hello": "hello"}
+USER_ID = "me"
 
 
 @st.cache_resource
@@ -24,7 +26,9 @@ def new_thread() -> None:
 
 
 def caption(reply: ChatReply) -> str:
-    return f"{reply.agent or '-'} · HTTP {reply.status} · {reply.seconds:.1f}s"
+    path = " → ".join(["supervisor", *reply.route]) if reply.route else "supervisor"
+    request = f" · request `{reply.request_id[:8]}`" if reply.request_id else ""
+    return f"{path} · HTTP {reply.status} · {reply.seconds:.1f}s{request}"
 
 
 def show(message: dict[str, Any]) -> None:
@@ -41,46 +45,26 @@ if "thread_id" not in st.session_state:
 with st.sidebar:
     st.header("Settings")
     target = st.radio("Target", list(TARGETS), help="Dev API = deployed stack. Local = this Mac.")
-    agent_label = st.selectbox("Agent", list(AGENTS))
-    tone = st.text_input(
-        "Tone (optional)",
-        help="Overrides the tone the supervisor picks up from your message, "
-        'e.g. "make this formal: ...". Leave empty to let it decide.',
-    )
-    audience = st.text_input("Audience (optional)")
-    recipient = st.text_input(
-        "Recipient (optional)",
-        help="Who you're writing to. The supervisor also picks this up from "
-        '"replying to Sara: ...". Known people get the tone that suits them.',
-    )
     st.divider()
-    st.caption(f"thread_id: `{st.session_state.thread_id}`")
+    st.caption(f"user: `{USER_ID}` · thread: `{st.session_state.thread_id}`")
     st.button("New thread", on_click=new_thread)
 
 st.title("Agents chat")
 st.caption(
-    'Try "Sara is my manager, keep it formal but warm", then '
-    '"replying to Sara, she asked why the report is late. '
+    'You talk to the supervisor. Try "Sara is my manager, keep it formal but warm", '
+    'then "replying to Sara, she asked why the report is late. '
     'my draft: sorry got busy, will send tmrw".'
 )
 
 for message in st.session_state.messages:
     show(message)
 
-if text := st.chat_input("Type a message..."):
+if text := st.chat_input("Message the supervisor..."):
     user_message = {"role": "user", "text": text}
     st.session_state.messages.append(user_message)
     show(user_message)
 
-    request = ChatRequest(
-        user_id="chat-ui",
-        thread_id=st.session_state.thread_id,
-        text=text,
-        agent=AGENTS[agent_label],
-        tone=tone.strip() or None,
-        audience=audience.strip() or None,
-        recipient=recipient.strip() or None,
-    )
+    request = ChatRequest(user_id=USER_ID, thread_id=st.session_state.thread_id, text=text)
     with st.spinner("Thinking..."):
         try:
             reply = get_client(target).send(request)

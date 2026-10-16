@@ -11,7 +11,14 @@ IntentMatcher = Callable[[GraphState], bool]
 
 
 class InvalidAgentInput(ValueError):
-    """The request does not carry what the chosen agent needs."""
+    """The request does not carry what the chosen agent needs.
+
+    `ask` is a short question for the user about what is missing.
+    """
+
+    def __init__(self, message: str, ask: str | None = None) -> None:
+        super().__init__(message)
+        self.ask = ask or "I need a bit more detail to do that. Could you say more?"
 
 
 @dataclass(frozen=True)

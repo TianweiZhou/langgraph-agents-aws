@@ -15,7 +15,7 @@ def _settings(**overrides: str | None) -> Settings:
         "guardrail_id": None,
         "guardrail_version": "DRAFT",
         "checkpoint_table": None,
-        "supervisor_enabled": False,
+        "trace_content": True,
         "memory_table": None,
     }
     base.update(overrides)

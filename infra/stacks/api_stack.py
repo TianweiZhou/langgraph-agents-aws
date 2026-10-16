@@ -101,7 +101,8 @@ class ApiStack(Stack):
                 "LOG_LEVEL": "INFO",
                 "BEDROCK_MODEL_ID": bedrock_model_id,
                 "CHECKPOINT_TABLE": conversations.table_name,
-                "SUPERVISOR_ENABLED": "true",
+                # Message text in trace logs (cut short) only outside prod.
+                "TRACE_CONTENT": "false" if app_env == "prod" else "true",
                 "MEMORY_TABLE": memory.table_name,
             },
         )
